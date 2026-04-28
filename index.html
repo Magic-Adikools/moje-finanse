@@ -9,8 +9,9 @@
     <meta name="theme-color" content="#2c3e50">
     <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-  import { getFirestore, doc, setDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+  import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
+  // Twoja konfiguracja, którą wkleiłeś
   const firebaseConfig = {
     apiKey: "AIzaSyCpiWeF3KT6DmoFOu2sYnXJ_zkXc7Poyss",
     authDomain: "finanse-pro.firebaseapp.com",
@@ -21,53 +22,44 @@
     measurementId: "G-TCX9PMV858"
   };
 
+  // Inicjalizacja Firebase
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
-  const docRef = doc(db, "budzet", "uzytkownik_1");
 
-  let isUpdatingFromCloud = false;
-
-  // Funkcja wysyłająca dane
-  window.saveToCloud = async function(dataToSave) {
-    if (isUpdatingFromCloud) return;
-    try {
-      await setDoc(docRef, { 
-        dane: JSON.stringify(dataToSave), 
-        lastUpdate: Date.now(),
-        senderId: navigator.userAgent // Prosty identyfikator urządzenia
-      });
-    } catch (e) { console.error("Błąd zapisu:", e); }
-  };
-
-  // Nasłuchiwanie zmian (na żywo)
-  onSnapshot(docRef, (doc) => {
-    if (doc.exists()) {
-      const cloudDataRaw = doc.data();
-      const isUserTyping = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
-      
-      // Jeśli zmiana przyszła z innego urządzenia i nie piszemy teraz
-      if (!isUserTyping && !isUpdatingFromCloud) {
-        const cloudData = JSON.parse(cloudDataRaw.dane);
-        
-        // Sprawdzamy czy dane lokalne są inne niż te w chmurze
-        if (JSON.stringify(window.data) !== JSON.stringify(cloudData)) {
-          isUpdatingFromCloud = true;
-          window.data = cloudData;
-          localStorage.setItem("finanse", JSON.stringify(cloudData));
-          
-          if (typeof load === "function") {
-            load(); // Odśwież widok
-          }
-          
-          setTimeout(() => { isUpdatingFromCloud = false; }, 500);
-        }
-      }
-    }
-  });
-
+  // Rejestracja Service Workera dla trybu offline
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js');
   }
+
+  // --- LOGIKA SYNCHRONIZACJI ---
+
+  // Nazwa dokumentu w bazie - możesz tu później dodać logowanie, 
+  // na razie używamy jednego wspólnego konta "moje_wydatki"
+  const docRef = doc(db, "budzet", "uzytkownik_1");
+
+  // FUNKCJA: Wysyłanie danych do chmury
+  window.saveToCloud = async function(data) {
+    try {
+      await setDoc(docRef, { dane: JSON.stringify(data) });
+    } catch (e) {
+      console.error("Błąd zapisu do chmury: ", e);
+    }
+  };
+
+  // FUNKCJA: Pobieranie danych w czasie rzeczywistym
+  // Gdy zmienisz coś na laptopie, telefon sam to wykryje i odświeży tabelę
+  onSnapshot(docRef, (doc) => {
+    if (doc.exists()) {
+      const cloudData = JSON.parse(doc.data().dane);
+      // Tutaj musisz mieć swoją funkcję renderującą tabelę, np:
+      // data = cloudData; 
+      // renderTable();
+      // UWAGA: Musisz dostosować tę linię do nazw zmiennych w Twoim kodzie!
+      if (typeof updateLocalData === "function") {
+          updateLocalData(cloudData);
+      }
+    }
+  });
 </script>
 
     <style>
