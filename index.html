@@ -14,13 +14,53 @@
   import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
   const firebaseConfig = {
-    // Twoje dane konfiguracyjne...
+    apiKey: "AIzaSyCpiWeF3KT6DmoFOu2sYnXJ_zkXc7Poyss",
+    authDomain: "finanse-pro.firebaseapp.com",
+    projectId: "finanse-pro",
+    storageBucket: "finanse-pro.firebasestorage.app",
+    messagingSenderId: "1075770103726",
+    appId: "1:1075770103726:web:4ac44445fc654657475a3f",
+    measurementId: "G-TCX9PMV858"
   };
 
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
 
-  // ... cała reszta nowej logiki z isUpdatingFromCloud i document.hasFocus() ...
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js');
+  }
+
+  const docRef = doc(db, "budzet", "uzytkownik_1");
+
+  let isUpdatingFromCloud = false;
+
+  window.saveToCloud = async function(dataToSave) {
+    if (isUpdatingFromCloud) return; 
+    
+    try {
+      await setDoc(docRef, { dane: JSON.stringify(dataToSave), lastUpdate: Date.now() });
+    } catch (e) {
+      console.error("Błąd zapisu: ", e);
+    }
+  };
+
+  // --- TO JEST TEN POPRAWIONY FRAGMENT ---
+  onSnapshot(docRef, (doc) => {
+    // Sprawdzamy, czy użytkownik aktualnie coś wpisuje
+    const isUserTyping = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
+
+    if (doc.exists() && !isUserTyping && !isUpdatingFromCloud) {
+      isUpdatingFromCloud = true;
+      const cloudData = JSON.parse(doc.data().dane);
+      
+      if (typeof updateLocalData === "function") {
+          updateLocalData(cloudData);
+      }
+      
+      // Krótka blokada, aby uniknąć pętli
+      setTimeout(() => { isUpdatingFromCloud = false; }, 1000);
+    }
+  });
 </script>
 
 <style>
