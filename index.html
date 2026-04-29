@@ -8,72 +8,58 @@
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2c3e50">
     <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, doc, setDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-    const firebaseConfig = {
-        apiKey: "AIzaSyCpiWeF3KT6DmoFOu2sYnXJ_zkXc7Poyss",
-        authDomain: "finanse-pro.firebaseapp.com",
-        projectId: "finanse-pro",
-        storageBucket: "finanse-pro.firebasestorage.app",
-        messagingSenderId: "1075770103726",
-        appId: "1:1075770103726:web:4ac44445fc654657475a3f",
-        measurementId: "G-TCX9PMV858"
-    };
+  // Twoja konfiguracja, którą wkleiłeś
+  const firebaseConfig = {
+    apiKey: "AIzaSyCpiWeF3KT6DmoFOu2sYnXJ_zkXc7Poyss",
+    authDomain: "finanse-pro.firebaseapp.com",
+    projectId: "finanse-pro",
+    storageBucket: "finanse-pro.firebasestorage.app",
+    messagingSenderId: "1075770103726",
+    appId: "1:1075770103726:web:4ac44445fc654657475a3f",
+    measurementId: "G-TCX9PMV858"
+  };
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const docRef = doc(db, "budzet", "uzytkownik_1");
+  // Inicjalizacja Firebase
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
 
-    let lastAction = 0;
-    let remoteTimestamp = 0;
+  // Rejestracja Service Workera dla trybu offline
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js');
+  }
 
-    // Pobieranie danych przy starcie aplikacji
-    async function initialLoad() {
-        try {
-            const snap = await getDoc(docRef);
-            if (snap.exists()) {
-                const cloud = snap.data();
-                window.data = JSON.parse(cloud.dane);
-                localStorage.setItem("finanse", cloud.dane);
-                remoteTimestamp = cloud.t;
-                if (typeof load === "function") load();
-            }
-        } catch (e) { console.error("Błąd startu:", e); }
+  // --- LOGIKA SYNCHRONIZACJI ---
+
+  // Nazwa dokumentu w bazie - możesz tu później dodać logowanie, 
+  // na razie używamy jednego wspólnego konta "moje_wydatki"
+  const docRef = doc(db, "budzet", "uzytkownik_1");
+
+  // FUNKCJA: Wysyłanie danych do chmury
+  window.saveToCloud = async function(data) {
+    try {
+      await setDoc(docRef, { dane: JSON.stringify(data) });
+    } catch (e) {
+      console.error("Błąd zapisu do chmury: ", e);
     }
-    initialLoad();
+  };
 
-    // Funkcja wysyłania - wywoływana przez aplikację
-    window.saveToCloud = async function(dataToSave) {
-        const now = Date.now();
-        lastAction = now; 
-        remoteTimestamp = now;
-        try {
-            await setDoc(docRef, { 
-                dane: JSON.stringify(dataToSave), 
-                t: now 
-            });
-        } catch (e) { console.error("Błąd zapisu:", e); }
-    };
-
-    // Nasłuchiwanie zmian z innych urządzeń
-    onSnapshot(docRef, (doc) => {
-        if (!doc.exists()) return;
-        const cloud = doc.data();
-        if (cloud.t <= remoteTimestamp) return;
-
-        // Jeśli nie piszesz nic teraz w żadnym polu, zaktualizuj dane
-        const isTyping = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
-        if (Date.now() - lastAction > 5000 && !isTyping) {
-            remoteTimestamp = cloud.t;
-            window.data = JSON.parse(cloud.dane);
-            localStorage.setItem("finanse", cloud.dane);
-            if (typeof load === "function") load();
-        }
-    });
-
-    const activity = () => { lastAction = Date.now(); };
-    ['mousedown', 'keydown', 'touchstart'].forEach(e => document.addEventListener(e, activity));
+  // FUNKCJA: Pobieranie danych w czasie rzeczywistym
+  // Gdy zmienisz coś na laptopie, telefon sam to wykryje i odświeży tabelę
+  onSnapshot(docRef, (doc) => {
+    if (doc.exists()) {
+      const cloudData = JSON.parse(doc.data().dane);
+      // Tutaj musisz mieć swoją funkcję renderującą tabelę, np:
+      // data = cloudData; 
+      // renderTable();
+      // UWAGA: Musisz dostosować tę linię do nazw zmiennych w Twoim kodzie!
+      if (typeof updateLocalData === "function") {
+          updateLocalData(cloudData);
+      }
+    }
+  });
 </script>
 
     <style>
@@ -243,7 +229,7 @@ let currentYear = now.getFullYear();
 let calMonth = currentMonth;
 let calYear = currentYear;
 
-window.data = JSON.parse(localStorage.getItem("finanse")) || { global: { longTerm: [] } };
+let data = JSON.parse(localStorage.getItem("finanse")) || { global: { longTerm: [] } };
 if(!data.global) data.global = { longTerm: [] };
 
 const months = ["Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień"];
@@ -268,16 +254,16 @@ function renderMonths() {
 
 function key() { return currentYear + "-" + currentMonth; }
 function save() { 
-    localStorage.setItem("finanse", JSON.stringify(window.data)); 
+    localStorage.setItem("finanse", JSON.stringify(data)); 
     // Dodajemy wysyłkę do Firebase:
     if (typeof saveToCloud === "function") {
-        saveToCloud(window.data);
+        saveToCloud(data);
     }
 }
 
 function load() {
     let k = key();
-    let d = window.data[k] || { income: [], expense: [], reminders: [], notes: "", vacation: "" };
+    let d = data[k] || { income: [], expense: [], reminders: [], notes: "", vacation: "" };
     document.getElementById("incomeBody").innerHTML = "";
     document.getElementById("expenseBody").innerHTML = "";
     document.getElementById("reminderBody").innerHTML = "";
@@ -285,7 +271,7 @@ function load() {
     if(d.income) d.income.forEach(i => addIncome(i));
     if(d.expense) d.expense.forEach(e => addExpense(e));
     if(d.reminders) d.reminders.forEach(r => addReminder(r));
-    if(window.data.global && window.data.global.longTerm) window.data.global.longTerm.forEach(lt => addLongTerm(lt));
+    if(data.global && data.global.longTerm) data.global.longTerm.forEach(lt => addLongTerm(lt));
     document.getElementById("notes").value = d.notes || "";
     document.getElementById("vacation").value = d.vacation || "";
     update();
@@ -352,18 +338,18 @@ function removeRow(btn, isGlobal = false) { btn.closest("tr").remove(); update()
 
 function update() {
     let k = key();
-    if(!window.data[k]) window.data[k] = {};
-    window.data[k].income = []; window.data[k].expense = []; window.data[k].reminders = [];
-    window.data[k].notes = document.getElementById("notes").value;
-    window.data[k].vacation = document.getElementById("vacation").value;
-    if(!window.data.global) window.data.global = { longTerm: [] };
-    window.data.global.longTerm = [];
+    if(!data[k]) data[k] = {};
+    data[k].income = []; data[k].expense = []; data[k].reminders = [];
+    data[k].notes = document.getElementById("notes").value;
+    data[k].vacation = document.getElementById("vacation").value;
+    if(!data.global) data.global = { longTerm: [] };
+    data.global.longTerm = [];
     
     let inc = 0, exp = 0, bankMap = {}, todayStr = new Date().toISOString().split('T')[0];
 
     document.querySelectorAll("#incomeBody tr").forEach(r => {
         let val = Number(r.querySelector(".inc-amount").value) || 0;
-        inc += val; window.data[k].income.push({ name: r.querySelector(".inc-name").value, amount: val });
+        inc += val; data[k].income.push({ name: r.querySelector(".inc-name").value, amount: val });
     });
 
     document.querySelectorAll("#expenseBody tr").forEach(r => {
@@ -373,7 +359,7 @@ function update() {
         let costToSum = partial ? pAmount : amount;
         exp += costToSum;
         if(!bankMap[bank]) bankMap[bank] = 0; bankMap[bank] += costToSum;
-        window.data[k].expense.push({ name, bank, date, amount, paid, partial, partialAmount: pAmount });
+        data[k].expense.push({ name, bank, date, amount, paid, partial, partialAmount: pAmount });
         r.classList.remove("paid", "partial", "overdue");
         if (paid) r.classList.add("paid"); else if (partial) r.classList.add("partial"); else if (date && date < todayStr) r.classList.add("overdue");
     });
@@ -383,7 +369,7 @@ function update() {
     });
 
     document.querySelectorAll("#longTermBody tr").forEach(r => {
-        window.data.global.longTerm.push({ name: r.querySelector(".lt-name").value, date: r.querySelector(".lt-date").value, amount: Number(r.querySelector(".lt-amount").value) || 0 });
+        data.global.longTerm.push({ name: r.querySelector(".lt-name").value, date: r.querySelector(".lt-date").value, amount: Number(r.querySelector(".lt-amount").value) || 0 });
     });
 
     document.getElementById("sumIncome").innerText = inc.toLocaleString();
@@ -424,15 +410,15 @@ function renderCalendar() {
 
 function cloneIncome() {
     let nm = currentMonth + 1, ny = currentYear; if (nm > 11) { nm = 0; ny++; }
-    if (!window.data[ny + "-" + nm]) window.data[ny + "-" + nm] = { income: [], expense: [], reminders: [], notes: "", vacation: "" };
-    window.data[ny + "-" + nm].income = JSON.parse(JSON.stringify(window.data[key()].income));
+    if (!data[ny + "-" + nm]) data[ny + "-" + nm] = { income: [], expense: [], reminders: [], notes: "", vacation: "" };
+    data[ny + "-" + nm].income = JSON.parse(JSON.stringify(data[key()].income));
     save(); alert("Skopiowano dochody!");
 }
 
 function cloneExpenses() {
     let nm = currentMonth + 1, ny = currentYear; if (nm > 11) { nm = 0; ny++; }
-    if (!window.data[ny + "-" + nm]) window.data[ny + "-" + nm] = { income: [], expense: [], reminders: [], notes: "", vacation: "" };
-    window.data[ny + "-" + nm].expense = JSON.parse(JSON.stringify(window.data[key()].expense)).map(e => {
+    if (!data[ny + "-" + nm]) data[ny + "-" + nm] = { income: [], expense: [], reminders: [], notes: "", vacation: "" };
+    data[ny + "-" + nm].expense = JSON.parse(JSON.stringify(data[key()].expense)).map(e => {
         e.paid = false; e.partial = false;
         if (e.date) {
             let d = new Date(e.date); d.setMonth(d.getMonth() + 1); e.date = d.toISOString().split('T')[0];
@@ -444,8 +430,8 @@ function cloneExpenses() {
 
 function cloneReminders() {
     let nm = currentMonth + 1, ny = currentYear; if (nm > 11) { nm = 0; ny++; }
-    if (!window.data[ny + "-" + nm]) window.data[ny + "-" + nm] = { income: [], expense: [], reminders: [], notes: "", vacation: "" };
-    window.data[ny + "-" + nm].reminders = JSON.parse(JSON.stringify(window.data[key()].reminders)).map(r => {
+    if (!data[ny + "-" + nm]) data[ny + "-" + nm] = { income: [], expense: [], reminders: [], notes: "", vacation: "" };
+    data[ny + "-" + nm].reminders = JSON.parse(JSON.stringify(data[key()].reminders)).map(r => {
         if (r.date) {
             let d = new Date(r.date); d.setMonth(d.getMonth() + 1); r.date = d.toISOString().split('T')[0];
         }
@@ -456,13 +442,20 @@ function cloneReminders() {
 
 function cloneVacation() {
     let nm = currentMonth + 1, ny = currentYear; if (nm > 11) { nm = 0; ny++; }
-    if (!window.data[ny + "-" + nm]) window.data[ny + "-" + nm] = { income: [], expense: [], reminders: [], notes: "", vacation: "" };
-    window.data[ny + "-" + nm].vacation = document.getElementById("vacation").value;
+    if (!data[ny + "-" + nm]) data[ny + "-" + nm] = { income: [], expense: [], reminders: [], notes: "", vacation: "" };
+    data[ny + "-" + nm].vacation = document.getElementById("vacation").value;
     save(); alert("Skopiowano plany!");
 }
 
 init();
 // Ta funkcja aktualizuje aplikację, gdy przyjdą dane z innego urządzenia
+window.updateLocalData = function(cloudData) {
+    // Sprawdzamy, czy dane z chmury są nowsze/różne od lokalnych
+    if (JSON.stringify(data) !== JSON.stringify(cloudData)) {
+        data = cloudData;
+        localStorage.setItem("finanse", JSON.stringify(data));
+        load(); // Odświeżamy tabelę na ekranie
+    }
 }
 </script>
 </body>
