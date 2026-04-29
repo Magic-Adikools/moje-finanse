@@ -9,7 +9,7 @@
     <meta name="theme-color" content="#2c3e50">
     <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-  import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+  import { getFirestore, doc, setDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyCpiWeF3KT6DmoFOu2sYnXJ_zkXc7Poyss",
@@ -28,37 +28,48 @@
   let lastAction = 0;
   let remoteTimestamp = 0;
 
-  // WYSYŁANIE - tylko gdy my coś zmieniamy
+  // --- NOWOŚĆ: Pobierz dane zaraz po starcie ---
+  async function initialLoad() {
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const cloud = snap.data();
+      window.data = JSON.parse(cloud.dane);
+      localStorage.setItem("finanse", JSON.stringify(window.data));
+      remoteTimestamp = cloud.t;
+      if (typeof load === "function") load();
+    }
+  }
+  initialLoad();
+
   window.saveToCloud = async function(dataToSave) {
-    lastAction = Date.now(); 
+    const now = Date.now();
+    lastAction = now; 
+    remoteTimestamp = now; // Uznajemy naszą zmianę za najnowszą
     try {
       await setDoc(docRef, { 
         dane: JSON.stringify(dataToSave), 
-        t: lastAction 
+        t: now 
       });
     } catch (e) { console.error("Błąd zapisu:", e); }
   };
 
-  // ODBIERANIE - z blokadą 15-sekundową
   onSnapshot(docRef, (doc) => {
     if (!doc.exists()) return;
     const cloud = doc.data();
     
-    // Jeśli to co w chmurze jest starsze niż nasza ostatnia zmiana - ignoruj
+    // Jeśli w chmurze jest to samo co u nas lub starsze - ignoruj
     if (cloud.t <= remoteTimestamp) return;
-    remoteTimestamp = cloud.t;
 
     const isTyping = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
     const now = Date.now();
 
-    // ZWIĘKSZONY CZAS: 20 sekund spokoju po każdym kliknięciu
-    if (now - lastAction > 20000 && !isTyping) {
+    // Skróciłem czas do 10 sekund dla lepszej responsywności
+    if (now - lastAction > 10000 && !isTyping) {
       const parsed = JSON.parse(cloud.dane);
-      if (JSON.stringify(window.data) !== JSON.stringify(parsed)) {
-        window.data = parsed;
-        localStorage.setItem("finanse", JSON.stringify(parsed));
-        if (typeof load === "function") load();
-      }
+      remoteTimestamp = cloud.t;
+      window.data = parsed;
+      localStorage.setItem("finanse", JSON.stringify(parsed));
+      if (typeof load === "function") load();
     }
   });
 
