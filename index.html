@@ -28,7 +28,6 @@
     let lastAction = 0;
     let remoteTimestamp = 0;
 
-    // Pobieranie danych przy starcie aplikacji
     async function initialLoad() {
         try {
             const snap = await getDoc(docRef);
@@ -43,7 +42,6 @@
     }
     initialLoad();
 
-    // Funkcja wysyłania - wywoływana przez aplikację
     window.saveToCloud = async function(dataToSave) {
         const now = Date.now();
         lastAction = now; 
@@ -56,13 +54,11 @@
         } catch (e) { console.error("Błąd zapisu:", e); }
     };
 
-    // Nasłuchiwanie zmian z innych urządzeń
     onSnapshot(docRef, (doc) => {
         if (!doc.exists()) return;
         const cloud = doc.data();
         if (cloud.t <= remoteTimestamp) return;
 
-        // Jeśli nie piszesz nic teraz w żadnym polu, zaktualizuj dane
         const isTyping = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
         if (Date.now() - lastAction > 5000 && !isTyping) {
             remoteTimestamp = cloud.t;
@@ -82,7 +78,7 @@
             --accent: #3498db;
             --bg: #f4f7f6;
             --white: #ffffff;
-            --danger: #ff0000; /* Pkt 7: Bardziej czerwony */
+            --danger: #ff0000;
             --success: #27ae60;
             --reminder: #9b59b6;
         }
@@ -99,12 +95,10 @@
         
         h3 { border-left: 5px solid var(--accent); padding: 8px 12px; margin-top: 30px; background: #fff; border-radius: 0 8px 8px 0; box-shadow: 2px 2px 5px rgba(0,0,0,0.05); font-size: 1.1em; }
 
-        /* Pkt 6: Poprawka tabeli na mobilną */
         table { width: 100%; background: var(--white); border-collapse: collapse; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 10px; }
         th { background: #f1f3f5; padding: 10px; font-size: 10px; text-transform: uppercase; color: #666; }
         td { border-bottom: 1px solid #f0f0f0; padding: 10px 5px; text-align: center; vertical-align: middle; }
 
-        /* Styl dla rzędów wydatków */
         .exp-row td { vertical-align: top; }
         .name-cell { text-align: left !important; min-width: 120px; }
 
@@ -114,7 +108,6 @@
         .sub-input { font-size: 11px; color: #777; margin-top: 4px; border: none; background: transparent; border-bottom: 1px dashed #ccc; border-radius: 0; width: 100%; }
         .remaining-tag { font-size: 10px; color: var(--danger); font-weight: bold; display: block; margin-top: 3px; }
 
-        /* Pkt 4: Automatyczne zł */
         .kwota-wrap { position: relative; }
         .kwota-wrap::after { content: "zł"; position: absolute; right: 8px; top: 10px; font-size: 11px; color: #aaa; }
 
@@ -124,9 +117,8 @@
 
         .paid { background-color: #e8f5e9 !important; }
         .partial { background-color: #fffde7 !important; }
-        .overdue { background-color: #ffeaea !important; border: 2px solid var(--danger) !important; } /* Pkt 7 */
+        .overdue { background-color: #ffeaea !important; border: 2px solid var(--danger) !important; }
 
-        /* Pkt 1: Kompaktowe przyciski akcji */
         .action-group { display: flex; flex-direction: row; gap: 2px; justify-content: center; }
 
         .summary-box { background: var(--primary); color: white; padding: 20px; border-radius: 12px; margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -137,7 +129,6 @@
         .cal-day { padding: 8px; border-radius: 5px; }
         .today { background: var(--accent); color: white; font-weight: bold; }
 
-        /* Specjalne poprawki dla małych ekranów */
         @media (max-width: 600px) {
             th:nth-child(4), th:nth-child(5) { font-size: 7px; padding: 5px 2px; }
             .name-cell { min-width: 80px; }
@@ -164,7 +155,6 @@
 <div id="months"></div>
 
 <div class="container">
-
     <h3>📈 Dochody</h3>
     <table>
         <thead><tr><th style="width:30px">#</th><th>Nazwa i kwota</th><th style="width:40px">🗑️</th></tr></thead>
@@ -175,23 +165,9 @@
 
     <h3>💸 Wydatki Miesięczne</h3>
     <table>
-        <colgroup>
-            <col style="width: 25px;">
-            <col>
-            <col style="width: 85px;">
-            <col style="width: 35px;">
-            <col style="width: 35px;">
-            <col style="width: 40px;">
-        </colgroup>
+        <colgroup><col style="width: 25px;"><col><col style="width: 85px;"><col style="width: 35px;"><col style="width: 35px;"><col style="width: 40px;"></colgroup>
         <thead>
-            <tr>
-                <th>#</th>
-                <th>Opis / Źródło / Data</th>
-                <th>Kwota</th>
-                <th>ZAPŁ.</th>
-                <th>CZĘŚĆ.</th>
-                <th>AKCJA</th>
-            </tr>
+            <tr><th>#</th><th>Opis / Źródło / Data</th><th>Kwota</th><th>ZAPŁ.</th><th>CZĘŚĆ.</th><th>AKCJA</th></tr>
         </thead>
         <tbody id="expenseBody"></tbody>
     </table>
@@ -217,7 +193,7 @@
     <button class="btn-add" style="background:var(--reminder)" onclick="addReminder()">➕ Dodaj Przypomnienie</button>
     <button class="btn-clone" onclick="cloneReminders()">📋 Kopiuj przypomnienia na kolejny miesiąc</button>
 
-    <h3 style="border-left-color: var(--primary)">🛡️ Wydatki Długoterminowe <small style="font-size:10px; font-weight:normal; opacity:0.8">(widoczne co miesiąc)</small></h3>
+    <h3 style="border-left-color: var(--primary)">🛡️ Wydatki Długoterminowe</h3>
     <table>
         <thead><tr><th style="width:40px">#</th><th>Zobowiązanie / Termin</th><th>Kwota</th><th style="width:40px">🗑️</th></tr></thead>
         <tbody id="longTermBody"></tbody>
@@ -233,7 +209,6 @@
 
     <h3>📝 Notatki</h3>
     <textarea id="notes" style="height:100px; margin-bottom: 40px;" placeholder="Dodatkowe informacje..." oninput="update()"></textarea>
-
 </div>
 
 <script>
@@ -244,7 +219,7 @@ let calMonth = currentMonth;
 let calYear = currentYear;
 
 window.data = JSON.parse(localStorage.getItem("finanse")) || { global: { longTerm: [] } };
-if(!data.global) data.global = { longTerm: [] };
+if(!window.data.global) window.data.global = { longTerm: [] };
 
 const months = ["Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień"];
 
@@ -267,9 +242,9 @@ function renderMonths() {
 }
 
 function key() { return currentYear + "-" + currentMonth; }
+
 function save() { 
     localStorage.setItem("finanse", JSON.stringify(window.data)); 
-    // Dodajemy wysyłkę do Firebase:
     if (typeof saveToCloud === "function") {
         saveToCloud(window.data);
     }
@@ -379,7 +354,7 @@ function update() {
     });
 
     document.querySelectorAll("#reminderBody tr").forEach(r => {
-        data[k].reminders.push({ name: r.querySelector(".rem-name").value, date: r.querySelector(".rem-date").value });
+        window.data[k].reminders.push({ name: r.querySelector(".rem-name").value, date: r.querySelector(".rem-date").value });
     });
 
     document.querySelectorAll("#longTermBody tr").forEach(r => {
@@ -462,8 +437,7 @@ function cloneVacation() {
 }
 
 init();
-// Ta funkcja aktualizuje aplikację, gdy przyjdą dane z innego urządzenia
-}
+
 </script>
 </body>
 </html>
