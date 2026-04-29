@@ -9,7 +9,7 @@
     <meta name="theme-color" content="#2c3e50">
     <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-  import { getFirestore, doc, setDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+  import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyCpiWeF3KT6DmoFOu2sYnXJ_zkXc7Poyss",
@@ -25,41 +25,36 @@
   const db = getFirestore(app);
   const docRef = doc(db, "budzet", "uzytkownik_1");
 
-  let isUpdatingFromCloud = false;
+  let lastSaveTime = 0;
 
-  // Funkcja wysyłająca dane
+  // Funkcja wysyłająca
   window.saveToCloud = async function(dataToSave) {
-    if (isUpdatingFromCloud) return;
+    lastSaveTime = Date.now(); // Oznaczamy, że to MY wysyłamy
     try {
       await setDoc(docRef, { 
         dane: JSON.stringify(dataToSave), 
-        lastUpdate: Date.now(),
-        senderId: navigator.userAgent // Prosty identyfikator urządzenia
+        timestamp: lastSaveTime 
       });
-    } catch (e) { console.error("Błąd zapisu:", e); }
+    } catch (e) { console.error("Błąd:", e); }
   };
 
-  // Nasłuchiwanie zmian (na żywo)
+  // Funkcja odbierająca
   onSnapshot(docRef, (doc) => {
     if (doc.exists()) {
-      const cloudDataRaw = doc.data();
-      const isUserTyping = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
+      const cloud = doc.data();
+      const now = Date.now();
+
+      // AKTUALIZUJ TYLKO JEŚLI:
+      // 1. Zmiana w chmurze jest nowsza niż nasze ostatnie kliknięcie (z marginesem 2s)
+      // 2. Nie mamy aktywnego kursora w polu tekstowym (żeby nie uciekał tekst)
+      const isTyping = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
       
-      // Jeśli zmiana przyszła z innego urządzenia i nie piszemy teraz
-      if (!isUserTyping && !isUpdatingFromCloud) {
-        const cloudData = JSON.parse(cloudDataRaw.dane);
-        
-        // Sprawdzamy czy dane lokalne są inne niż te w chmurze
-        if (JSON.stringify(window.data) !== JSON.stringify(cloudData)) {
-          isUpdatingFromCloud = true;
-          window.data = cloudData;
-          localStorage.setItem("finanse", JSON.stringify(cloudData));
-          
-          if (typeof load === "function") {
-            load(); // Odśwież widok
-          }
-          
-          setTimeout(() => { isUpdatingFromCloud = false; }, 500);
+      if (cloud.timestamp > lastSaveTime + 2000 && !isTyping) {
+        const newItems = JSON.parse(cloud.dane);
+        if (JSON.stringify(window.data) !== JSON.stringify(newItems)) {
+          window.data = newItems;
+          localStorage.setItem("finanse", JSON.stringify(newItems));
+          if (typeof load === "function") load();
         }
       }
     }
