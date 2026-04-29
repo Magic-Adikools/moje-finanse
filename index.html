@@ -7,74 +7,74 @@
 
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2c3e50">
-    
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, doc, setDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, doc, setDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyCpiWeF3KT6DmoFOu2sYnXJ_zkXc7Poyss",
-            authDomain: "finanse-pro.firebaseapp.com",
-            projectId: "finanse-pro",
-            storageBucket: "finanse-pro.firebasestorage.app",
-            messagingSenderId: "1075770103726",
-            appId: "1:1075770103726:web:4ac44445fc654657475a3f",
-            measurementId: "G-TCX9PMV858"
-        };
+    const firebaseConfig = {
+        apiKey: "AIzaSyCpiWeF3KT6DmoFOu2sYnXJ_zkXc7Poyss",
+        authDomain: "finanse-pro.firebaseapp.com",
+        projectId: "finanse-pro",
+        storageBucket: "finanse-pro.firebasestorage.app",
+        messagingSenderId: "1075770103726",
+        appId: "1:1075770103726:web:4ac44445fc654657475a3f",
+        measurementId: "G-TCX9PMV858"
+    };
 
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const docRef = doc(db, "budzet", "uzytkownik_1");
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const docRef = doc(db, "budzet", "uzytkownik_1");
 
-        let lastAction = 0;
-        let remoteTimestamp = 0;
+    let lastAction = 0;
+    let remoteTimestamp = 0;
 
-        // POBIERANIE NA START
-        async function initialLoad() {
-            try {
-                const snap = await getDoc(docRef);
-                if (snap.exists()) {
-                    const cloud = snap.data();
-                    window.data = JSON.parse(cloud.dane);
-                    localStorage.setItem("finanse", cloud.dane);
-                    remoteTimestamp = cloud.t;
-                    if (typeof load === "function") load();
-                }
-            } catch (e) { console.error("Błąd startu:", e); }
-        }
-        initialLoad();
-
-        // WYSYŁANIE DO CHMURY
-        window.saveToCloud = async function(dataToSave) {
-            const now = Date.now();
-            lastAction = now; 
-            remoteTimestamp = now;
-            try {
-                await setDoc(docRef, { 
-                    dane: JSON.stringify(dataToSave), 
-                    t: now 
-                });
-            } catch (e) { console.error("Błąd zapisu:", e); }
-        };
-
-        // ODBIERANIE ZMIAN
-        onSnapshot(docRef, (doc) => {
-            if (!doc.exists()) return;
-            const cloud = doc.data();
-            if (cloud.t <= remoteTimestamp) return;
-
-            const isTyping = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
-            if (Date.now() - lastAction > 8000 && !isTyping) {
-                remoteTimestamp = cloud.t;
+    // Pobieranie danych przy starcie aplikacji
+    async function initialLoad() {
+        try {
+            const snap = await getDoc(docRef);
+            if (snap.exists()) {
+                const cloud = snap.data();
                 window.data = JSON.parse(cloud.dane);
                 localStorage.setItem("finanse", cloud.dane);
+                remoteTimestamp = cloud.t;
                 if (typeof load === "function") load();
             }
-        });
+        } catch (e) { console.error("Błąd startu:", e); }
+    }
+    initialLoad();
 
-        const activity = () => { lastAction = Date.now(); };
-        ['mousedown', 'keydown', 'touchstart'].forEach(e => document.addEventListener(e, activity));
-    </script>
+    // Funkcja wysyłania - wywoływana przez aplikację
+    window.saveToCloud = async function(dataToSave) {
+        const now = Date.now();
+        lastAction = now; 
+        remoteTimestamp = now;
+        try {
+            await setDoc(docRef, { 
+                dane: JSON.stringify(dataToSave), 
+                t: now 
+            });
+        } catch (e) { console.error("Błąd zapisu:", e); }
+    };
+
+    // Nasłuchiwanie zmian z innych urządzeń
+    onSnapshot(docRef, (doc) => {
+        if (!doc.exists()) return;
+        const cloud = doc.data();
+        if (cloud.t <= remoteTimestamp) return;
+
+        // Jeśli nie piszesz nic teraz w żadnym polu, zaktualizuj dane
+        const isTyping = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
+        if (Date.now() - lastAction > 5000 && !isTyping) {
+            remoteTimestamp = cloud.t;
+            window.data = JSON.parse(cloud.dane);
+            localStorage.setItem("finanse", cloud.dane);
+            if (typeof load === "function") load();
+        }
+    });
+
+    const activity = () => { lastAction = Date.now(); };
+    ['mousedown', 'keydown', 'touchstart'].forEach(e => document.addEventListener(e, activity));
+</script>
 
     <style>
         :root {
@@ -82,62 +82,89 @@
             --accent: #3498db;
             --bg: #f4f7f6;
             --white: #ffffff;
-            --danger: #ff0000;
+            --danger: #ff0000; /* Pkt 7: Bardziej czerwony */
             --success: #27ae60;
             --reminder: #9b59b6;
         }
 
         body { font-family: 'Segoe UI', Roboto, sans-serif; margin:0; background: var(--bg); color: #333; padding-bottom: 60px; }
         header { background: var(--primary); color: white; padding: 20px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        
         #topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #fff; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 1000; }
         #months { display: flex; overflow-x: auto; background: #fff; border-bottom: 1px solid #eee; }
         .month { padding: 15px 25px; cursor: pointer; flex: 0 0 auto; border-right: 1px solid #f0f0f0; font-weight: 600; font-size: 14px; }
         .active { background: var(--accent) !important; color: white; }
+
         .container { padding: 15px; max-width: 850px; margin: auto; }
+        
         h3 { border-left: 5px solid var(--accent); padding: 8px 12px; margin-top: 30px; background: #fff; border-radius: 0 8px 8px 0; box-shadow: 2px 2px 5px rgba(0,0,0,0.05); font-size: 1.1em; }
+
+        /* Pkt 6: Poprawka tabeli na mobilną */
         table { width: 100%; background: var(--white); border-collapse: collapse; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 10px; }
         th { background: #f1f3f5; padding: 10px; font-size: 10px; text-transform: uppercase; color: #666; }
         td { border-bottom: 1px solid #f0f0f0; padding: 10px 5px; text-align: center; vertical-align: middle; }
+
+        /* Styl dla rzędów wydatków */
+        .exp-row td { vertical-align: top; }
         .name-cell { text-align: left !important; min-width: 120px; }
+
         input, textarea { width: 95%; border: 1px solid #ddd; padding: 8px; border-radius: 6px; font-size: 14px; box-sizing: border-box; }
         input[type="checkbox"] { width: 22px; height: 22px; cursor: pointer; }
+        
         .sub-input { font-size: 11px; color: #777; margin-top: 4px; border: none; background: transparent; border-bottom: 1px dashed #ccc; border-radius: 0; width: 100%; }
         .remaining-tag { font-size: 10px; color: var(--danger); font-weight: bold; display: block; margin-top: 3px; }
+
+        /* Pkt 4: Automatyczne zł */
         .kwota-wrap { position: relative; }
         .kwota-wrap::after { content: "zł"; position: absolute; right: 8px; top: 10px; font-size: 11px; color: #aaa; }
+
         .btn-action { background: #eee; border: 1px solid #ccc; cursor: pointer; font-size: 14px; padding: 4px 8px; border-radius: 4px; }
         .btn-add { background: var(--accent); color: white; border: none; padding: 14px; width: 100%; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 8px; }
         .btn-clone { background: #edf2f7; color: #4a5568; border: 1px solid #cbd5e0; padding: 12px; width: 100%; border-radius: 8px; margin-bottom: 20px; cursor: pointer; font-size: 13px; font-weight: 500; }
+
         .paid { background-color: #e8f5e9 !important; }
         .partial { background-color: #fffde7 !important; }
-        .overdue { background-color: #ffeaea !important; border: 2px solid var(--danger) !important; }
+        .overdue { background-color: #ffeaea !important; border: 2px solid var(--danger) !important; } /* Pkt 7 */
+
+        /* Pkt 1: Kompaktowe przyciski akcji */
         .action-group { display: flex; flex-direction: row; gap: 2px; justify-content: center; }
+
         .summary-box { background: var(--primary); color: white; padding: 20px; border-radius: 12px; margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .summary-val { font-size: 1.2em; font-weight: bold; }
+
         #mini-calendar { background: white; padding: 15px; border-radius: 12px; margin-top: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
         .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 12px; }
         .cal-day { padding: 8px; border-radius: 5px; }
         .today { background: var(--accent); color: white; font-weight: bold; }
+
+        /* Specjalne poprawki dla małych ekranów */
         @media (max-width: 600px) {
             th:nth-child(4), th:nth-child(5) { font-size: 7px; padding: 5px 2px; }
+            .name-cell { min-width: 80px; }
             .action-group { flex-direction: column; }
         }
     </style>
 </head>
 
 <body>
-<header><h2>💎 Finanse PRO</h2></header>
+
+<header>
+    <h2 style="margin: 5px 0;">💎 Finanse PRO</h2>
+</header>
+
 <div id="topbar">
     <button class="btn-action" onclick="prevYear()">◀</button>
     <div style="text-align: center;">
         <span id="year" style="font-weight:bold; font-size:1.3em; display: block;"></span>
-        <button onclick="goToToday()" style="font-size: 10px; border: none; background: #eee; border-radius: 4px; padding: 2px 8px;">Pokaż DZISIAJ</button>
+        <button onclick="goToToday()" style="font-size: 10px; border: none; background: #eee; border-radius: 4px; padding: 2px 8px; cursor: pointer;">Pokaż DZISIAJ</button>
     </div>
     <button class="btn-action" onclick="nextYear()">▶</button>
 </div>
+
 <div id="months"></div>
 
 <div class="container">
+
     <h3>📈 Dochody</h3>
     <table>
         <thead><tr><th style="width:30px">#</th><th>Nazwa i kwota</th><th style="width:40px">🗑️</th></tr></thead>
@@ -148,7 +175,24 @@
 
     <h3>💸 Wydatki Miesięczne</h3>
     <table>
-        <thead><tr><th>#</th><th>Opis / Źródło / Data</th><th>Kwota</th><th>ZAPŁ.</th><th>CZĘŚĆ.</th><th>AKCJA</th></tr></thead>
+        <colgroup>
+            <col style="width: 25px;">
+            <col>
+            <col style="width: 85px;">
+            <col style="width: 35px;">
+            <col style="width: 35px;">
+            <col style="width: 40px;">
+        </colgroup>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Opis / Źródło / Data</th>
+                <th>Kwota</th>
+                <th>ZAPŁ.</th>
+                <th>CZĘŚĆ.</th>
+                <th>AKCJA</th>
+            </tr>
+        </thead>
         <tbody id="expenseBody"></tbody>
     </table>
     <button class="btn-add" onclick="addExpense()">➕ Dodaj Wydatek</button>
@@ -158,30 +202,38 @@
     <div id="banks"></div>
 
     <div class="summary-box">
-        <div>Dochody:<br><span class="summary-val" id="sumIncome">0</span> zł</div>
-        <div>Wydatki:<br><span class="summary-val" id="sumExpense">0</span> zł</div>
-        <div style="grid-column: span 2; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 10px;">
-            Pozostaje:<br><span class="summary-val" id="balance" style="font-size: 1.5em; color: #5dade2;">0</span> zł
+        <div>Dochody ogółem:<br><span class="summary-val" id="sumIncome">0</span> zł</div>
+        <div>Wydatki ogółem:<br><span class="summary-val" id="sumExpense">0</span> zł</div>
+        <div style="grid-column: span 2; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 10px; margin-top: 5px;">
+            Pozostaje do dyspozycji:<br><span class="summary-val" id="balance" style="font-size: 1.5em; color: #5dade2;">0</span> zł
         </div>
     </div>
 
     <h3 style="border-left-color: var(--reminder)">🔔 Przypomnienia</h3>
-    <table><tbody id="reminderBody"></tbody></table>
+    <table>
+        <thead><tr><th style="width:40px">#</th><th>Czynność / Termin</th><th style="width:40px">🗑️</th></tr></thead>
+        <tbody id="reminderBody"></tbody>
+    </table>
     <button class="btn-add" style="background:var(--reminder)" onclick="addReminder()">➕ Dodaj Przypomnienie</button>
-    <button class="btn-clone" onclick="cloneReminders()">📋 Kopiuj przypomnienia</button>
+    <button class="btn-clone" onclick="cloneReminders()">📋 Kopiuj przypomnienia na kolejny miesiąc</button>
 
-    <h3 style="border-left-color: var(--primary)">🛡️ Wydatki Długoterminowe</h3>
-    <table><tbody id="longTermBody"></tbody></table>
-    <button class="btn-add" style="background:var(--primary)" onclick="addLongTerm()">➕ Dodaj Długoterminowy</button>
+    <h3 style="border-left-color: var(--primary)">🛡️ Wydatki Długoterminowe <small style="font-size:10px; font-weight:normal; opacity:0.8">(widoczne co miesiąc)</small></h3>
+    <table>
+        <thead><tr><th style="width:40px">#</th><th>Zobowiązanie / Termin</th><th>Kwota</th><th style="width:40px">🗑️</th></tr></thead>
+        <tbody id="longTermBody"></tbody>
+    </table>
+    <button class="btn-add" style="background:var(--primary)" onclick="addLongTerm()">➕ Dodaj Wydatek Długoterminowy</button>
 
-    <h3>🌴 URLOP I WAKACJE</h3>
-    <textarea id="vacation" style="height:80px;" placeholder="Plany..." oninput="update()"></textarea>
-    <button class="btn-clone" onclick="cloneVacation()">📋 Kopiuj plany</button>
+    <h3>🌴 Planowanie: URLOP I WAKACJE</h3>
+    <textarea id="vacation" style="height:80px; margin-bottom: 5px;" placeholder="Miejsce docelowe, termin, budżet..." oninput="update()"></textarea>
+    <button class="btn-clone" onclick="cloneVacation()">📋 Kopiuj plany na kolejny miesiąc</button>
 
     <h3>📅 Kalendarz</h3>
     <div id="mini-calendar"></div>
+
     <h3>📝 Notatki</h3>
-    <textarea id="notes" style="height:100px; margin-bottom: 40px;" oninput="update()"></textarea>
+    <textarea id="notes" style="height:100px; margin-bottom: 40px;" placeholder="Dodatkowe informacje..." oninput="update()"></textarea>
+
 </div>
 
 <script>
@@ -192,21 +244,24 @@ let calMonth = currentMonth;
 let calYear = currentYear;
 
 window.data = JSON.parse(localStorage.getItem("finanse")) || { global: { longTerm: [] } };
+if(!data.global) data.global = { longTerm: [] };
+
 const months = ["Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień"];
 
 function init() { renderMonths(); updateYear(); load(); renderCalendar(); }
 function updateYear() { document.getElementById("year").innerText = currentYear; }
 function prevYear() { currentYear--; updateYear(); load(); }
 function nextYear() { currentYear++; updateYear(); load(); }
-function goToToday() { currentMonth = now.getMonth(); currentYear = now.getFullYear(); init(); }
+function goToToday() { currentMonth = now.getMonth(); currentYear = now.getFullYear(); calMonth = currentMonth; calYear = currentYear; init(); }
 
 function renderMonths() {
-    const div = document.getElementById("months"); div.innerHTML = "";
+    const div = document.getElementById("months");
+    div.innerHTML = "";
     months.forEach((m, i) => {
         let d = document.createElement("div");
         d.innerText = m.substring(0,3);
         d.className = "month" + (i === currentMonth ? " active" : "");
-        d.onclick = () => { currentMonth = i; renderMonths(); load(); }
+        d.onclick = () => { currentMonth = i; calMonth = i; calYear = currentYear; renderMonths(); load(); renderCalendar(); }
         div.appendChild(d);
     });
 }
@@ -214,7 +269,10 @@ function renderMonths() {
 function key() { return currentYear + "-" + currentMonth; }
 function save() { 
     localStorage.setItem("finanse", JSON.stringify(window.data)); 
-    if (typeof saveToCloud === "function") saveToCloud(window.data);
+    // Dodajemy wysyłkę do Firebase:
+    if (typeof saveToCloud === "function") {
+        saveToCloud(window.data);
+    }
 }
 
 function load() {
@@ -235,66 +293,93 @@ function load() {
 
 function addIncome(d = {}) {
     let r = document.getElementById("incomeBody").insertRow();
-    r.innerHTML = `<td></td><td><input class="inc-name" value="${d.name||''}" oninput="update()"><div class="kwota-wrap"><input type="number" class="inc-amount" value="${d.amount||''}" oninput="update()"></div></td><td><button onclick="removeRow(this)">🗑️</button></td>`;
+    r.innerHTML = `<td></td><td><input class="inc-name" placeholder="Nazwa" value="${d.name||''}" oninput="update()"><div class="kwota-wrap"><input type="number" class="inc-amount" placeholder="Kwota" value="${d.amount||''}" oninput="update()" style="margin-top:5px"></div></td><td><button class="btn-action" onclick="removeRow(this)">🗑️</button></td>`;
 }
 
 function addExpense(d = {}) {
     let r = document.getElementById("expenseBody").insertRow();
-    r.innerHTML = `<td></td><td class="name-cell"><input class="exp-name" value="${d.name||''}" oninput="update()"><input class="exp-bank sub-input" value="${d.bank||''}" oninput="update()"><input type="date" class="exp-date sub-input" value="${d.date||''}" onchange="update()"></td><td><div class="kwota-wrap"><input type="number" class="exp-amount" value="${d.amount||''}" oninput="update()"></div><input type="number" class="exp-pamount sub-input" value="${d.partialAmount||''}" oninput="update()" style="display:${d.partial?'block':'none'}"><span class="remaining-tag" style="display:${d.partial?'block':'none'}"></span></td><td><input type="checkbox" class="exp-paid" ${d.paid?'checked':''} onchange="update()"></td><td><input type="checkbox" class="exp-partial" ${d.partial?'checked':''} onchange="togglePartial(this)"></td><td><div class="action-group"><button onclick="moveRow(this, -1)">▲</button><button onclick="moveRow(this, 1)">▼</button><button onclick="removeRow(this)">🗑️</button></div></td>`;
+    r.className = "exp-row";
+    r.innerHTML = `
+        <td></td>
+        <td class="name-cell">
+            <input class="exp-name" placeholder="Co?" value="${d.name||''}" oninput="update()" style="font-weight:bold; border:none; background:transparent; padding:2px;">
+            <input class="exp-bank sub-input" placeholder="Źródło spłaty" value="${d.bank||''}" oninput="update()">
+            <input type="date" class="exp-date sub-input" value="${d.date||''}" onchange="update()">
+        </td>
+        <td>
+            <div class="kwota-wrap"><input type="number" class="exp-amount" placeholder="0" value="${d.amount||''}" oninput="update()"></div>
+            <input type="number" class="exp-pamount sub-input" placeholder="Wpłacono" value="${d.partialAmount||''}" oninput="update()" style="display:${d.partial?'block':'none'}">
+            <span class="remaining-tag" style="display:${d.partial?'block':'none'}">Reszta: 0</span>
+        </td>
+        <td><input type="checkbox" class="exp-paid" ${d.paid?'checked':''} onchange="update()"></td>
+        <td><input type="checkbox" class="exp-partial" ${d.partial?'checked':''} onchange="togglePartial(this)"></td>
+        <td>
+            <div class="action-group">
+                <button class="btn-action" onclick="moveRow(this, -1)">▲</button>
+                <button class="btn-action" onclick="moveRow(this, 1)">▼</button>
+                <button class="btn-action" onclick="removeRow(this)">🗑️</button>
+            </div>
+        </td>`;
 }
 
 function addReminder(d = {}) {
     let r = document.getElementById("reminderBody").insertRow();
-    r.innerHTML = `<td></td><td><input class="rem-name" value="${d.name||''}" oninput="update()"><input type="date" class="rem-date sub-input" value="${d.date||''}" onchange="update()"></td><td><button onclick="removeRow(this)">🗑️</button></td>`;
+    r.innerHTML = `<td></td><td><input class="rem-name" placeholder="Zadanie" value="${d.name||''}" oninput="update()"><input type="date" class="rem-date sub-input" value="${d.date||''}" onchange="update()"></td><td><button class="btn-action" onclick="removeRow(this)">🗑️</button></td>`;
 }
 
 function addLongTerm(d = {}) {
     let r = document.getElementById("longTermBody").insertRow();
-    r.innerHTML = `<td></td><td><input class="lt-name" value="${d.name||''}" oninput="update()"><input type="date" class="lt-date sub-input" value="${d.date||''}" onchange="update()"></td><td><div class="kwota-wrap"><input type="number" class="lt-amount" value="${d.amount||''}" oninput="update()"></div></td><td><button onclick="removeRow(this, true)">🗑️</button></td>`;
+    r.innerHTML = `<td></td><td><input class="lt-name" placeholder="Zobowiązanie" value="${d.name||''}" oninput="update()"><input type="date" class="lt-date sub-input" value="${d.date||''}" onchange="update()"></td><td><div class="kwota-wrap"><input type="number" class="lt-amount" placeholder="Kwota" value="${d.amount||''}" oninput="update()"></div></td><td><button class="btn-action" onclick="removeRow(this, true)">🗑️</button></td>`;
 }
 
 function togglePartial(cb) {
-    let r = cb.closest("tr");
-    r.querySelector(".exp-pamount").style.display = cb.checked ? "block" : "none";
-    r.querySelector(".remaining-tag").style.display = cb.checked ? "block" : "none";
+    let row = cb.closest("tr");
+    row.querySelector(".exp-pamount").style.display = cb.checked ? "block" : "none";
+    row.querySelector(".remaining-tag").style.display = cb.checked ? "block" : "none";
     update();
 }
 
 function moveRow(btn, dir) {
     const row = btn.closest("tr");
     const sibling = dir === -1 ? row.previousElementSibling : row.nextElementSibling;
-    if (sibling) { row.parentNode.insertBefore(dir === -1 ? row : sibling, dir === -1 ? sibling : row); update(); }
+    if (sibling) {
+        row.parentNode.insertBefore(dir === -1 ? row : sibling, dir === -1 ? sibling : row);
+        update();
+    }
 }
 
 function removeRow(btn, isGlobal = false) { btn.closest("tr").remove(); update(); }
 
 function update() {
     let k = key();
-    if(!window.data[k]) window.data[k] = { income: [], expense: [], reminders: [] };
+    if(!window.data[k]) window.data[k] = {};
     window.data[k].income = []; window.data[k].expense = []; window.data[k].reminders = [];
     window.data[k].notes = document.getElementById("notes").value;
     window.data[k].vacation = document.getElementById("vacation").value;
     if(!window.data.global) window.data.global = { longTerm: [] };
     window.data.global.longTerm = [];
-
+    
     let inc = 0, exp = 0, bankMap = {}, todayStr = new Date().toISOString().split('T')[0];
 
     document.querySelectorAll("#incomeBody tr").forEach(r => {
-        let v = Number(r.querySelector(".inc-amount").value) || 0;
-        inc += v; window.data[k].income.push({ name: r.querySelector(".inc-name").value, amount: v });
+        let val = Number(r.querySelector(".inc-amount").value) || 0;
+        inc += val; window.data[k].income.push({ name: r.querySelector(".inc-name").value, amount: val });
     });
 
     document.querySelectorAll("#expenseBody tr").forEach(r => {
-        let n = r.querySelector(".exp-name").value, b = r.querySelector(".exp-bank").value || "Inne", d = r.querySelector(".exp-date").value, a = Number(r.querySelector(".exp-amount").value) || 0, p = r.querySelector(".exp-paid").checked, pr = r.querySelector(".exp-partial").checked, pa = Number(r.querySelector(".exp-pamount").value) || 0;
-        let rem = a - pa; r.querySelector(".remaining-tag").innerText = "Reszta: " + (rem > 0 ? rem : 0);
-        let cost = pr ? pa : a; exp += cost;
-        if(!bankMap[b]) bankMap[b] = 0; bankMap[b] += cost;
-        window.data[k].expense.push({ name: n, bank: b, date: d, amount: a, paid: p, partial: pr, partialAmount: pa });
-        r.className = p ? "paid" : (pr ? "partial" : (d && d < todayStr ? "overdue" : ""));
+        let name = r.querySelector(".exp-name").value, bank = r.querySelector(".exp-bank").value || "Nieokreślone", date = r.querySelector(".exp-date").value, amount = Number(r.querySelector(".exp-amount").value) || 0, paid = r.querySelector(".exp-paid").checked, partial = r.querySelector(".exp-partial").checked, pAmount = Number(r.querySelector(".exp-pamount").value) || 0;
+        let remaining = amount - pAmount;
+        r.querySelector(".remaining-tag").innerText = "Reszta: " + (remaining > 0 ? remaining : 0);
+        let costToSum = partial ? pAmount : amount;
+        exp += costToSum;
+        if(!bankMap[bank]) bankMap[bank] = 0; bankMap[bank] += costToSum;
+        window.data[k].expense.push({ name, bank, date, amount, paid, partial, partialAmount: pAmount });
+        r.classList.remove("paid", "partial", "overdue");
+        if (paid) r.classList.add("paid"); else if (partial) r.classList.add("partial"); else if (date && date < todayStr) r.classList.add("overdue");
     });
 
     document.querySelectorAll("#reminderBody tr").forEach(r => {
-        window.data[k].reminders.push({ name: r.querySelector(".rem-name").value, date: r.querySelector(".rem-date").value });
+        data[k].reminders.push({ name: r.querySelector(".rem-name").value, date: r.querySelector(".rem-date").value });
     });
 
     document.querySelectorAll("#longTermBody tr").forEach(r => {
@@ -307,37 +392,78 @@ function update() {
     renderBanks(bankMap); renumber(); save();
 }
 
-function renderBanks(map) {
-    let bDiv = document.getElementById("banks"); bDiv.innerHTML = "";
-    for (let b in map) {
-        bDiv.innerHTML += `<div style="background:white; padding:10px; margin-bottom:5px; border-radius:8px; border-left:4px solid var(--accent); display:flex; justify-content:space-between"><span>${b}</span><span>${map[b].toLocaleString()} zł</span></div>`;
-    }
-}
-
-function renderCalendar() {
-    const cal = document.getElementById("mini-calendar");
-    const lastDay = new Date(calYear, calMonth + 1, 0).getDate();
-    let html = `<div style="text-align:center; margin-bottom:10px"><b>${months[calMonth]} ${calYear}</b></div><div class="cal-grid">`;
-    for(let d=1; d<=lastDay; d++) {
-        let isToday = (d === now.getDate() && calMonth === now.getMonth() && calYear === now.getFullYear()) ? "today" : "";
-        html += `<div class="cal-day ${isToday}">${d}</div>`;
-    }
-    cal.innerHTML = html + "</div>";
-}
-
 function renumber() {
     document.querySelectorAll("tbody").forEach(tbody => {
         [...tbody.rows].forEach((r, i) => { r.cells[0].innerText = i + 1; });
     });
 }
 
-// Funkcje kopiowania
-function cloneIncome() { let nm = (currentMonth + 1) % 12; let ny = currentYear + (currentMonth === 11 ? 1 : 0); if(!window.data[ny+"-"+nm]) window.data[ny+"-"+nm] = {income:[]}; window.data[ny+"-"+nm].income = JSON.parse(JSON.stringify(window.data[key()].income)); save(); alert("Skopiowano!"); }
-function cloneExpenses() { let nm = (currentMonth + 1) % 12; let ny = currentYear + (currentMonth === 11 ? 1 : 0); if(!window.data[ny+"-"+nm]) window.data[ny+"-"+nm] = {expense:[]}; window.data[ny+"-"+nm].expense = JSON.parse(JSON.stringify(window.data[key()].expense)).map(e=>{e.paid=false; e.partial=false; return e;}); save(); alert("Skopiowano!"); }
-function cloneReminders() { let nm = (currentMonth + 1) % 12; let ny = currentYear + (currentMonth === 11 ? 1 : 0); if(!window.data[ny+"-"+nm]) window.data[ny+"-"+nm] = {reminders:[]}; window.data[ny+"-"+nm].reminders = JSON.parse(JSON.stringify(window.data[key()].reminders)); save(); alert("Skopiowano!"); }
-function cloneVacation() { let nm = (currentMonth + 1) % 12; let ny = currentYear + (currentMonth === 11 ? 1 : 0); if(!window.data[ny+"-"+nm]) window.data[ny+"-"+nm] = {vacation:""}; window.data[ny+"-"+nm].vacation = window.data[key()].vacation; save(); alert("Skopiowano!"); }
+function renderBanks(map) {
+    let bDiv = document.getElementById("banks"); bDiv.innerHTML = "";
+    for (let b in map) {
+        if(b !== "") bDiv.innerHTML += `<div style="background:white; padding:10px; margin-bottom:5px; border-radius:8px; border-left:4px solid var(--accent); display:flex; justify-content:space-between"><span>${b}</span><span>${map[b].toLocaleString()} zł</span></div>`;
+    }
+}
+
+function changeCalMonth(dir) { calMonth += dir; if (calMonth < 0) { calMonth = 11; calYear--; } else if (calMonth > 11) { calMonth = 0; calYear++; } renderCalendar(); }
+
+function renderCalendar() {
+    const cal = document.getElementById("mini-calendar");
+    const d = new Date(calYear, calMonth, 1);
+    const lastDay = new Date(calYear, calMonth + 1, 0).getDate();
+    let startDay = d.getDay() === 0 ? 6 : d.getDay() - 1;
+    let html = `<div style="display:flex; justify-content:space-between; margin-bottom:10px"><button class="btn-action" onclick="changeCalMonth(-1)">◀</button><b>${months[calMonth]} ${calYear}</b><button class="btn-action" onclick="changeCalMonth(1)">▶</button></div><div class="cal-grid">`;
+    ["Pn","Wt","Śr","Cz","Pt","So","Nd"].forEach(day => html += `<div style="font-weight:bold; color:#999">${day}</div>`);
+    for(let i=0; i<startDay; i++) html += `<div></div>`;
+    for(let day=1; day<=lastDay; day++) {
+        let isToday = (day === now.getDate() && calMonth === now.getMonth() && calYear === now.getFullYear()) ? "today" : "";
+        html += `<div class="cal-day ${isToday}">${day}</div>`;
+    }
+    cal.innerHTML = html + "</div>";
+}
+
+function cloneIncome() {
+    let nm = currentMonth + 1, ny = currentYear; if (nm > 11) { nm = 0; ny++; }
+    if (!window.data[ny + "-" + nm]) window.data[ny + "-" + nm] = { income: [], expense: [], reminders: [], notes: "", vacation: "" };
+    window.data[ny + "-" + nm].income = JSON.parse(JSON.stringify(window.data[key()].income));
+    save(); alert("Skopiowano dochody!");
+}
+
+function cloneExpenses() {
+    let nm = currentMonth + 1, ny = currentYear; if (nm > 11) { nm = 0; ny++; }
+    if (!window.data[ny + "-" + nm]) window.data[ny + "-" + nm] = { income: [], expense: [], reminders: [], notes: "", vacation: "" };
+    window.data[ny + "-" + nm].expense = JSON.parse(JSON.stringify(window.data[key()].expense)).map(e => {
+        e.paid = false; e.partial = false;
+        if (e.date) {
+            let d = new Date(e.date); d.setMonth(d.getMonth() + 1); e.date = d.toISOString().split('T')[0];
+        }
+        return e;
+    });
+    save(); alert("Skopiowano wydatki!");
+}
+
+function cloneReminders() {
+    let nm = currentMonth + 1, ny = currentYear; if (nm > 11) { nm = 0; ny++; }
+    if (!window.data[ny + "-" + nm]) window.data[ny + "-" + nm] = { income: [], expense: [], reminders: [], notes: "", vacation: "" };
+    window.data[ny + "-" + nm].reminders = JSON.parse(JSON.stringify(window.data[key()].reminders)).map(r => {
+        if (r.date) {
+            let d = new Date(r.date); d.setMonth(d.getMonth() + 1); r.date = d.toISOString().split('T')[0];
+        }
+        return r;
+    });
+    save(); alert("Skopiowano przypomnienia!");
+}
+
+function cloneVacation() {
+    let nm = currentMonth + 1, ny = currentYear; if (nm > 11) { nm = 0; ny++; }
+    if (!window.data[ny + "-" + nm]) window.data[ny + "-" + nm] = { income: [], expense: [], reminders: [], notes: "", vacation: "" };
+    window.data[ny + "-" + nm].vacation = document.getElementById("vacation").value;
+    save(); alert("Skopiowano plany!");
+}
 
 init();
+// Ta funkcja aktualizuje aplikację, gdy przyjdą dane z innego urządzenia
+}
 </script>
 </body>
 </html>
