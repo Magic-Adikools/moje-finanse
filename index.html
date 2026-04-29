@@ -25,64 +25,45 @@
   const db = getFirestore(app);
   const docRef = doc(db, "budzet", "uzytkownik_1");
 
-  let lastLocalActionTime = 0; // Czas ostatniego kliknięcia/wpisania u nas
-  let isCloudSyncing = false;  // Flaga blokująca wysyłanie podczas pobierania
+  let lastAction = 0;
+  let remoteTimestamp = 0;
 
-  // FUNKCJA WYSYŁAJĄCA (Zapis do chmury)
+  // WYSYŁANIE - tylko gdy my coś zmieniamy
   window.saveToCloud = async function(dataToSave) {
-    if (isCloudSyncing) return; // Nie wysyłaj, jeśli właśnie pobierasz
-    
-    lastLocalActionTime = Date.now(); // Odśwież czas naszej aktywności
-    
+    lastAction = Date.now(); 
     try {
       await setDoc(docRef, { 
         dane: JSON.stringify(dataToSave), 
-        updateTimestamp: lastLocalActionTime 
+        t: lastAction 
       });
-    } catch (e) { console.error("Błąd wysyłania:", e); }
+    } catch (e) { console.error("Błąd zapisu:", e); }
   };
 
-  // FUNKCJA ODBIERAJĄCA (Nasłuchiwanie na zmiany)
+  // ODBIERANIE - z blokadą 15-sekundową
   onSnapshot(docRef, (doc) => {
     if (!doc.exists()) return;
-
-    const cloudDataRaw = doc.data();
-    const now = Date.now();
+    const cloud = doc.data();
     
-    // Sprawdź, czy użytkownik aktualnie nie pisze (kursor w polu)
-    const isTyping = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
+    // Jeśli to co w chmurze jest starsze niż nasza ostatnia zmiana - ignoruj
+    if (cloud.t <= remoteTimestamp) return;
+    remoteTimestamp = cloud.t;
 
-    // KLUCZOWA LOGIKA: 
-    // Aktualizuj lokalny ekran TYLKO JEŚLI:
-    // 1. Nie klikaliśmy/nie pisaliśmy nic przez ostatnie 5 sekund
-    // 2. Kursor nie jest w żadnym polu tekstowym
-    if (now - lastLocalActionTime > 15000 && !isTyping) {
-      const cloudData = JSON.parse(cloudDataRaw.dane);
-      
-      // Dodatkowe sprawdzenie, czy dane faktycznie są inne
-      if (JSON.stringify(window.data) !== JSON.stringify(cloudData)) {
-        isCloudSyncing = true;
-        window.data = cloudData;
-        localStorage.setItem("finanse", JSON.stringify(cloudData));
-        
-        if (typeof load === "function") {
-          load(); // Przeładowanie tabeli na ekranie
-        }
-        
-        // Odblokuj wysyłanie po krótkiej chwili
-        setTimeout(() => { isCloudSyncing = false; }, 1000);
+    const isTyping = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
+    const now = Date.now();
+
+    // ZWIĘKSZONY CZAS: 20 sekund spokoju po każdym kliknięciu
+    if (now - lastAction > 20000 && !isTyping) {
+      const parsed = JSON.parse(cloud.dane);
+      if (JSON.stringify(window.data) !== JSON.stringify(parsed)) {
+        window.data = parsed;
+        localStorage.setItem("finanse", JSON.stringify(parsed));
+        if (typeof load === "function") load();
       }
     }
   });
 
-  // Rejestracja Service Workera (PWA)
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js');
-  }
-
-  // Monitoruj każde kliknięcie na stronie, żeby wiedzieć, że użytkownik jest aktywny
-  document.addEventListener('mousedown', () => { lastLocalActionTime = Date.now(); });
-  document.addEventListener('keydown', () => { lastLocalActionTime = Date.now(); });
+  document.addEventListener('mousedown', () => { lastAction = Date.now(); });
+  document.addEventListener('keydown', () => { lastAction = Date.now(); });
 </script>
 
     <style>
