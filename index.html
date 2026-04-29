@@ -25,44 +25,64 @@
   const db = getFirestore(app);
   const docRef = doc(db, "budzet", "uzytkownik_1");
 
-  let lastSaveTime = 0;
+  let lastLocalActionTime = 0; // Czas ostatniego kliknięcia/wpisania u nas
+  let isCloudSyncing = false;  // Flaga blokująca wysyłanie podczas pobierania
 
-  // Funkcja wysyłająca
+  // FUNKCJA WYSYŁAJĄCA (Zapis do chmury)
   window.saveToCloud = async function(dataToSave) {
-    lastSaveTime = Date.now(); // Oznaczamy, że to MY wysyłamy
+    if (isCloudSyncing) return; // Nie wysyłaj, jeśli właśnie pobierasz
+    
+    lastLocalActionTime = Date.now(); // Odśwież czas naszej aktywności
+    
     try {
       await setDoc(docRef, { 
         dane: JSON.stringify(dataToSave), 
-        timestamp: lastSaveTime 
+        updateTimestamp: lastLocalActionTime 
       });
-    } catch (e) { console.error("Błąd:", e); }
+    } catch (e) { console.error("Błąd wysyłania:", e); }
   };
 
-  // Funkcja odbierająca
+  // FUNKCJA ODBIERAJĄCA (Nasłuchiwanie na zmiany)
   onSnapshot(docRef, (doc) => {
-    if (doc.exists()) {
-      const cloud = doc.data();
-      const now = Date.now();
+    if (!doc.exists()) return;
 
-      // AKTUALIZUJ TYLKO JEŚLI:
-      // 1. Zmiana w chmurze jest nowsza niż nasze ostatnie kliknięcie (z marginesem 2s)
-      // 2. Nie mamy aktywnego kursora w polu tekstowym (żeby nie uciekał tekst)
-      const isTyping = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
+    const cloudDataRaw = doc.data();
+    const now = Date.now();
+    
+    // Sprawdź, czy użytkownik aktualnie nie pisze (kursor w polu)
+    const isTyping = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
+
+    // KLUCZOWA LOGIKA: 
+    // Aktualizuj lokalny ekran TYLKO JEŚLI:
+    // 1. Nie klikaliśmy/nie pisaliśmy nic przez ostatnie 5 sekund
+    // 2. Kursor nie jest w żadnym polu tekstowym
+    if (now - lastLocalActionTime > 15000 && !isTyping) {
+      const cloudData = JSON.parse(cloudDataRaw.dane);
       
-      if (cloud.timestamp > lastSaveTime + 2000 && !isTyping) {
-        const newItems = JSON.parse(cloud.dane);
-        if (JSON.stringify(window.data) !== JSON.stringify(newItems)) {
-          window.data = newItems;
-          localStorage.setItem("finanse", JSON.stringify(newItems));
-          if (typeof load === "function") load();
+      // Dodatkowe sprawdzenie, czy dane faktycznie są inne
+      if (JSON.stringify(window.data) !== JSON.stringify(cloudData)) {
+        isCloudSyncing = true;
+        window.data = cloudData;
+        localStorage.setItem("finanse", JSON.stringify(cloudData));
+        
+        if (typeof load === "function") {
+          load(); // Przeładowanie tabeli na ekranie
         }
+        
+        // Odblokuj wysyłanie po krótkiej chwili
+        setTimeout(() => { isCloudSyncing = false; }, 1000);
       }
     }
   });
 
+  // Rejestracja Service Workera (PWA)
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js');
   }
+
+  // Monitoruj każde kliknięcie na stronie, żeby wiedzieć, że użytkownik jest aktywny
+  document.addEventListener('mousedown', () => { lastLocalActionTime = Date.now(); });
+  document.addEventListener('keydown', () => { lastLocalActionTime = Date.now(); });
 </script>
 
     <style>
