@@ -58,6 +58,7 @@
             docRef = doc(db, "budzet", user.uid);
             window._docRef = docRef;
             await initialLoad();
+            notificationsBootCheck();
         } else {
             document.getElementById("login-screen").classList.add("active");
             document.getElementById("app-content").style.display = "none";
@@ -1961,6 +1962,127 @@ function tutorialBootCheck() {
     if (!localStorage.getItem(TUT_KEY)) {
         // Delay slightly so PIN screen renders first (if enabled)
         setTimeout(tutorialStart, 800);
+    }
+}
+
+/* ══════════════════════════════════════════════
+   POWIADOMIENIA LOKALNE
+══════════════════════════════════════════════ */
+const NOTIF_KEY = "notif_permission";
+
+async function requestNotificationPermission() {
+    if (!("Notification" in window)) return false;
+    if (Notification.permission === "granted") return true;
+    if (Notification.permission === "denied") return false;
+    const result = await Notification.requestPermission();
+    return result === "granted";
+}
+
+function sendNotification(title, body, tag) {
+    if (Notification.permission !== "granted") return;
+    new Notification(title, {
+        body: body,
+        icon: "ikona-192.png",
+        tag: tag,
+        renotify: false
+    });
+}
+
+function checkNotifications() {
+    if (Notification.permission !== "granted") return;
+    if (!window.data) return;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const todayStr = today.toISOString().split('T')[0];
+    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+    // Sprawdź wszystkie miesiące
+    Object.keys(window.data).forEach(k => {
+        if (k === "global") return;
+        const month = window.data[k];
+
+        // Wydatki — zaległe i jutrzejsze
+        if (month.expense) {
+            month.expense.forEach((e, i) => {
+                if (!e.date || e.paid) return;
+                const tag = `exp-${k}-${i}`;
+                if (e.date < todayStr) {
+                    sendNotification(
+                        "💸 Zaległa płatność!",
+                        `„${e.name || 'Wydatek'}" — termin minął ${e.date}`,
+                        tag
+                    );
+                } else if (e.date === tomorrowStr) {
+                    sendNotification(
+                        "⏰ Płatność jutro!",
+                        `„${e.name || 'Wydatek'}" — ${e.amount ? e.amount + ' zł' : ''} · termin jutro`,
+                        tag
+                    );
+                }
+            });
+        }
+
+        // Przypomnienia — zaległe i jutrzejsze
+        if (month.reminders) {
+            month.reminders.forEach((r, i) => {
+                if (!r.date) return;
+                const tag = `rem-${k}-${i}`;
+                if (r.date < todayStr) {
+                    sendNotification(
+                        "🔔 Zaległe przypomnienie!",
+                        `„${r.name || 'Przypomnienie'}" — termin minął ${r.date}`,
+                        tag
+                    );
+                } else if (r.date === tomorrowStr) {
+                    sendNotification(
+                        "🔔 Przypomnienie na jutro!",
+                        `„${r.name || 'Przypomnienie'}" — termin jutro`,
+                        tag
+                    );
+                }
+            });
+        }
+    });
+
+    // Wydatki długoterminowe
+    if (window.data.global && window.data.global.longTerm) {
+        window.data.global.longTerm.forEach((lt, i) => {
+            if (!lt.date) return;
+            const tag = `lt-${i}`;
+            if (lt.date < todayStr) {
+                sendNotification(
+                    "🛡️ Zaległe zobowiązanie!",
+                    `„${lt.name || 'Zobowiązanie'}" — termin minął ${lt.date}`,
+                    tag
+                );
+            } else if (lt.date === tomorrowStr) {
+                sendNotification(
+                    "🛡️ Zobowiązanie jutro!",
+                    `„${lt.name || 'Zobowiązanie'}" — termin jutro`,
+                    tag
+                );
+            }
+        });
+    }
+}
+
+async function notificationsBootCheck() {
+    if (!("Notification" in window)) return;
+    // Jeśli już mamy zgodę — od razu sprawdź
+    if (Notification.permission === "granted") {
+        setTimeout(checkNotifications, 2000);
+        return;
+    }
+    // Jeśli nie pytaliśmy jeszcze — zapytaj po 3 sek od zalogowania
+    if (Notification.permission === "default" && !localStorage.getItem(NOTIF_KEY)) {
+        setTimeout(async () => {
+            const granted = await requestNotificationPermission();
+            localStorage.setItem(NOTIF_KEY, granted ? "granted" : "denied");
+            if (granted) checkNotifications();
+        }, 3000);
     }
 }
 
