@@ -10,6 +10,7 @@
     <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getFirestore, doc, setDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyCpiWeF3KT6DmoFOu2sYnXJ_zkXc7Poyss",
@@ -23,10 +24,45 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
-    const docRef = doc(db, "budzet", "uzytkownik_1");
+    const auth = getAuth(app);
+    const provider = new GoogleAuthProvider();
 
     let lastAction = 0;
     let remoteTimestamp = 0;
+    let docRef = null;
+
+    // Google Sign-In
+    window.signInWithGoogle = async function() {
+        try {
+            await signInWithPopup(auth, provider);
+        } catch(e) {
+            console.error("Błąd logowania Google:", e);
+            document.getElementById("login-error").style.display = "block";
+        }
+    };
+
+    window.signOutGoogle = async function() {
+        await signOut(auth);
+        docRef = null;
+        document.getElementById("login-screen").classList.add("active");
+        document.getElementById("app-content").style.display = "none";
+        document.getElementById("login-user-info").textContent = "";
+    };
+
+    onAuthStateChanged(auth, async (user) => {
+        if (user) {
+            document.getElementById("login-screen").classList.remove("active");
+            document.getElementById("app-content").style.display = "block";
+            const name = user.displayName || user.email || "Użytkownik";
+            document.getElementById("login-user-info").textContent = name;
+            docRef = doc(db, "budzet", user.uid);
+            window._docRef = docRef;
+            await initialLoad();
+        } else {
+            document.getElementById("login-screen").classList.add("active");
+            document.getElementById("app-content").style.display = "none";
+        }
+    });
 
     async function initialLoad() {
         try {
@@ -39,179 +75,1511 @@
                 if (typeof load === "function") load();
             }
         } catch (e) { console.error("Błąd startu:", e); }
+
+        onSnapshot(docRef, (d) => {
+            if (!d.exists()) return;
+            const cloud = d.data();
+            if (cloud.t <= remoteTimestamp) return;
+            const isTyping = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
+            if (Date.now() - lastAction > 5000 && !isTyping) {
+                remoteTimestamp = cloud.t;
+                window.data = JSON.parse(cloud.dane);
+                localStorage.setItem("finanse", cloud.dane);
+                if (typeof load === "function") load();
+            }
+        });
     }
-    initialLoad();
 
     window.saveToCloud = async function(dataToSave) {
+        if (!docRef) return;
         const now = Date.now();
-        lastAction = now; 
+        lastAction = now;
         remoteTimestamp = now;
         try {
-            await setDoc(docRef, { 
-                dane: JSON.stringify(dataToSave), 
-                t: now 
+            await setDoc(docRef, {
+                dane: JSON.stringify(dataToSave),
+                t: now
             });
         } catch (e) { console.error("Błąd zapisu:", e); }
     };
-
-    onSnapshot(docRef, (doc) => {
-        if (!doc.exists()) return;
-        const cloud = doc.data();
-        if (cloud.t <= remoteTimestamp) return;
-
-        const isTyping = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
-        if (Date.now() - lastAction > 5000 && !isTyping) {
-            remoteTimestamp = cloud.t;
-            window.data = JSON.parse(cloud.dane);
-            localStorage.setItem("finanse", cloud.dane);
-            if (typeof load === "function") load();
-        }
-    });
 
     const activity = () => { lastAction = Date.now(); };
     ['mousedown', 'keydown', 'touchstart'].forEach(e => document.addEventListener(e, activity));
 </script>
 
     <style>
+        /* ══ DEFAULT THEME VARIABLES ══ */
         :root {
             --primary: #2c3e50;
             --accent: #3498db;
             --bg: #f4f7f6;
             --white: #ffffff;
-            --danger: #ff0000;
+            --danger: #e74c3c;
             --success: #27ae60;
             --reminder: #9b59b6;
+            --text: #333333;
+            --text-muted: #666666;
+            --border: #dddddd;
+            --th-bg: #f1f3f5;
+            --card-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            --topbar-bg: #ffffff;
+            --input-bg: #ffffff;
+            --btn-action-bg: #eeeeee;
+            --btn-clone-bg: #edf2f7;
+            --btn-clone-color: #4a5568;
+            --btn-clone-border: #cbd5e0;
+            --h3-bg: #ffffff;
+            --months-bg: #ffffff;
+            --balance-color: #5dade2;
+            --header-text: #ffffff;
         }
 
-        body { font-family: 'Segoe UI', Roboto, sans-serif; margin:0; background: var(--bg); color: #333; padding-bottom: 60px; }
-        header { background: var(--primary); color: white; padding: 20px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        
-        #topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #fff; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 1000; }
-        #months { display: flex; overflow-x: auto; background: #fff; border-bottom: 1px solid #eee; }
-        .month { padding: 15px 25px; cursor: pointer; flex: 0 0 auto; border-right: 1px solid #f0f0f0; font-weight: 600; font-size: 14px; }
-        .active { background: var(--accent) !important; color: white; }
+        /* ══ THEME: OCEAN DARK ══ */
+        body.theme-ocean {
+            --primary: #0a2540;
+            --accent: #00c2ff;
+            --bg: #0d1b2a;
+            --white: #132033;
+            --danger: #ff4d6d;
+            --success: #00d68f;
+            --reminder: #b57bee;
+            --text: #d0e8ff;
+            --text-muted: #7ea8cc;
+            --border: #1e3450;
+            --th-bg: #0f2133;
+            --card-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            --topbar-bg: #0a1e30;
+            --input-bg: #0f2133;
+            --btn-action-bg: #1a3250;
+            --btn-clone-bg: #112036;
+            --btn-clone-color: #7ea8cc;
+            --btn-clone-border: #1e3450;
+            --h3-bg: #0f2133;
+            --months-bg: #0a1e30;
+            --balance-color: #00c2ff;
+            --header-text: #d0e8ff;
+        }
+
+        /* ══ THEME: FOREST ══ */
+        body.theme-forest {
+            --primary: #1b4332;
+            --accent: #40916c;
+            --bg: #f0f4f1;
+            --white: #ffffff;
+            --danger: #c1121f;
+            --success: #2d6a4f;
+            --reminder: #6a4c93;
+            --text: #1b2b1e;
+            --text-muted: #4a6550;
+            --border: #c8d8cb;
+            --th-bg: #e8f0ea;
+            --card-shadow: 0 4px 15px rgba(27,67,50,0.08);
+            --topbar-bg: #ffffff;
+            --input-bg: #ffffff;
+            --btn-action-bg: #dde8df;
+            --btn-clone-bg: #eaf2ec;
+            --btn-clone-color: #2d6a4f;
+            --btn-clone-border: #b7d1bc;
+            --h3-bg: #ffffff;
+            --months-bg: #ffffff;
+            --balance-color: #52b788;
+            --header-text: #ffffff;
+        }
+
+        /* ══ THEME: SUNSET ══ */
+        body.theme-sunset {
+            --primary: #7b2d8b;
+            --accent: #f7971e;
+            --bg: #1a0a2e;
+            --white: #241040;
+            --danger: #ff4d6d;
+            --success: #06d6a0;
+            --reminder: #e040fb;
+            --text: #f0e6ff;
+            --text-muted: #b39acc;
+            --border: #3d1f5a;
+            --th-bg: #2a1245;
+            --card-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            --topbar-bg: #1f0d38;
+            --input-bg: #2a1245;
+            --btn-action-bg: #3a1a55;
+            --btn-clone-bg: #2d1248;
+            --btn-clone-color: #c49ee0;
+            --btn-clone-border: #4a2070;
+            --h3-bg: #2a1245;
+            --months-bg: #1f0d38;
+            --balance-color: #f7971e;
+            --header-text: #f0e6ff;
+        }
+
+        /* ══ THEME: ROSE GOLD ══ */
+        body.theme-rosegold {
+            --primary: #6b3040;
+            --accent: #c9776a;
+            --bg: #fdf6f0;
+            --white: #ffffff;
+            --danger: #b5293a;
+            --success: #5a8a6a;
+            --reminder: #9b6b8a;
+            --text: #3a1a20;
+            --text-muted: #8a5a60;
+            --border: #e8d0c8;
+            --th-bg: #f5e8e2;
+            --card-shadow: 0 4px 15px rgba(107,48,64,0.08);
+            --topbar-bg: #ffffff;
+            --input-bg: #ffffff;
+            --btn-action-bg: #f0ddd8;
+            --btn-clone-bg: #faf0ec;
+            --btn-clone-color: #7a4050;
+            --btn-clone-border: #e0c0b8;
+            --h3-bg: #ffffff;
+            --months-bg: #ffffff;
+            --balance-color: #c9776a;
+            --header-text: #ffffff;
+        }
+
+        /* ══ THEME: SLATE NIGHT ══ */
+        body.theme-slate {
+            --primary: #1e1e2e;
+            --accent: #cba6f7;
+            --bg: #181825;
+            --white: #1e1e2e;
+            --danger: #f38ba8;
+            --success: #a6e3a1;
+            --reminder: #cba6f7;
+            --text: #cdd6f4;
+            --text-muted: #7f849c;
+            --border: #313244;
+            --th-bg: #181825;
+            --card-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            --topbar-bg: #1e1e2e;
+            --input-bg: #181825;
+            --btn-action-bg: #313244;
+            --btn-clone-bg: #1e1e2e;
+            --btn-clone-color: #a6adc8;
+            --btn-clone-border: #45475a;
+            --h3-bg: #1e1e2e;
+            --months-bg: #1e1e2e;
+            --balance-color: #89dceb;
+            --header-text: #cdd6f4;
+        }
+
+        /* ══ BASE STYLES ══ */
+        body {
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            padding-bottom: 60px;
+            transition: background 0.3s, color 0.3s;
+        }
+        header { background: var(--primary); color: var(--header-text); padding: 20px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.15); }
+
+        #topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: var(--topbar-bg); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 1000; }
+        #topbar span { color: var(--text); }
+        #months { display: flex; overflow-x: auto; background: var(--months-bg); border-bottom: 1px solid var(--border); }
+        .month { padding: 15px 25px; cursor: pointer; flex: 0 0 auto; border-right: 1px solid var(--border); font-weight: 600; font-size: 14px; color: var(--text); }
+        .active { background: var(--accent) !important; color: #fff !important; }
 
         .container { padding: 15px; max-width: 850px; margin: auto; }
-        
-        h3 { border-left: 5px solid var(--accent); padding: 8px 12px; margin-top: 30px; background: #fff; border-radius: 0 8px 8px 0; box-shadow: 2px 2px 5px rgba(0,0,0,0.05); font-size: 1.1em; }
 
-        table { width: 100%; background: var(--white); border-collapse: collapse; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 10px; }
-        th { background: #f1f3f5; padding: 10px; font-size: 10px; text-transform: uppercase; color: #666; }
-        td { border-bottom: 1px solid #f0f0f0; padding: 10px 5px; text-align: center; vertical-align: middle; }
+        h3 { border-left: 5px solid var(--accent); padding: 8px 12px; margin-top: 30px; background: var(--h3-bg); color: var(--text); border-radius: 0 8px 8px 0; box-shadow: var(--card-shadow); font-size: 1.1em; }
+
+        table { width: 100%; background: var(--white); border-collapse: collapse; border-radius: 12px; overflow: hidden; box-shadow: var(--card-shadow); margin-bottom: 10px; }
+        th { background: var(--th-bg); padding: 10px; font-size: 10px; text-transform: uppercase; color: var(--text-muted); }
+        td { border-bottom: 1px solid var(--border); padding: 10px 5px; text-align: center; vertical-align: middle; color: var(--text); }
 
         .exp-row td { vertical-align: top; }
         .name-cell { text-align: left !important; min-width: 120px; }
 
-        input, textarea { width: 95%; border: 1px solid #ddd; padding: 8px; border-radius: 6px; font-size: 14px; box-sizing: border-box; }
+        input, textarea {
+            width: 95%; border: 1px solid var(--border); padding: 8px;
+            border-radius: 6px; font-size: 14px; box-sizing: border-box;
+            background: var(--input-bg); color: var(--text);
+        }
         input[type="checkbox"] { width: 22px; height: 22px; cursor: pointer; }
-        
-        .sub-input { font-size: 11px; color: #777; margin-top: 4px; border: none; background: transparent; border-bottom: 1px dashed #ccc; border-radius: 0; width: 100%; }
+
+        .sub-input { font-size: 11px; color: var(--text-muted); margin-top: 4px; border: none; background: transparent; border-bottom: 1px dashed var(--border); border-radius: 0; width: 100%; }
         .remaining-tag { font-size: 10px; color: var(--danger); font-weight: bold; display: block; margin-top: 3px; }
 
         .kwota-wrap { position: relative; }
-        .kwota-wrap::after { content: "zł"; position: absolute; right: 8px; top: 10px; font-size: 11px; color: #aaa; }
+        .kwota-wrap::after { content: "zł"; position: absolute; right: 8px; top: 10px; font-size: 11px; color: var(--text-muted); }
 
-        .btn-action { background: #eee; border: 1px solid #ccc; cursor: pointer; font-size: 14px; padding: 4px 8px; border-radius: 4px; }
+        .btn-action { background: var(--btn-action-bg); border: 1px solid var(--border); cursor: pointer; font-size: 14px; padding: 4px 8px; border-radius: 4px; color: var(--text); }
         .btn-add { background: var(--accent); color: white; border: none; padding: 14px; width: 100%; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 8px; }
-        .btn-clone { background: #edf2f7; color: #4a5568; border: 1px solid #cbd5e0; padding: 12px; width: 100%; border-radius: 8px; margin-bottom: 20px; cursor: pointer; font-size: 13px; font-weight: 500; }
+        .btn-clone { background: var(--btn-clone-bg); color: var(--btn-clone-color); border: 1px solid var(--btn-clone-border); padding: 12px; width: 100%; border-radius: 8px; margin-bottom: 20px; cursor: pointer; font-size: 13px; font-weight: 500; }
 
-        .paid { background-color: #e8f5e9 !important; }
-        .partial { background-color: #fffde7 !important; }
-        .overdue { background-color: #ffeaea !important; border: 2px solid var(--danger) !important; }
+        .paid { background-color: rgba(39,174,96,0.15) !important; }
+        .partial { background-color: rgba(241,196,15,0.12) !important; }
+        .overdue { background-color: rgba(231,76,60,0.12) !important; border: 2px solid var(--danger) !important; }
 
         .action-group { display: flex; flex-direction: row; gap: 2px; justify-content: center; }
 
-        .summary-box { background: var(--primary); color: white; padding: 20px; border-radius: 12px; margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .summary-box { background: var(--primary); color: var(--header-text); padding: 20px; border-radius: 12px; margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .summary-val { font-size: 1.2em; font-weight: bold; }
 
-        #mini-calendar { background: white; padding: 15px; border-radius: 12px; margin-top: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        #mini-calendar { background: var(--white); color: var(--text); padding: 15px; border-radius: 12px; margin-top: 20px; box-shadow: var(--card-shadow); }
         .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 12px; }
-        .cal-day { padding: 8px; border-radius: 5px; }
-        .today { background: var(--accent); color: white; font-weight: bold; }
+        .cal-day { padding: 8px; border-radius: 5px; color: var(--text); }
+        .today { background: var(--accent); color: white !important; font-weight: bold; }
+
+        .export-bar { display: flex; gap: 8px; margin-top: 12px; margin-bottom: 4px; }
+        .btn-export { flex: 1; padding: 11px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 13px; }
+        .btn-export-pdf { background: #e74c3c; color: white; }
+        .btn-export-csv { background: var(--success); color: white; }
+
+        /* Delete confirmation modal */
+        #confirm-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; align-items: center; justify-content: center; }
+        #confirm-modal.active { display: flex; }
+        #confirm-box { background: var(--white); border-radius: 14px; padding: 28px 24px 20px; max-width: 320px; width: 90%; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.3); }
+        #confirm-box p { margin: 0 0 20px; font-size: 16px; color: var(--text); }
+        .confirm-btns { display: flex; gap: 10px; justify-content: center; }
+        .btn-confirm-yes { background: #e74c3c; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; }
+        .btn-confirm-no  { background: var(--btn-action-bg); color: var(--text); border: 1px solid var(--border); padding: 10px 24px; border-radius: 8px; font-size: 15px; cursor: pointer; }
 
         @media (max-width: 600px) {
             th:nth-child(4), th:nth-child(5) { font-size: 7px; padding: 5px 2px; }
             .name-cell { min-width: 80px; }
             .action-group { flex-direction: column; }
         }
+
+        /* ── LOGIN SCREEN ── */
+        #login-screen {
+            display: none; position: fixed; inset: 0;
+            background: var(--primary); z-index: 99998;
+            flex-direction: column; align-items: center; justify-content: center;
+            gap: 20px; padding: 30px;
+        }
+        #login-screen.active { display: flex; }
+        #login-logo { font-size: 2.6em; color: var(--header-text); font-weight: bold; letter-spacing: 1px; }
+        #login-logo span { color: rgba(255,255,255,0.7); }
+        #login-subtitle { color: rgba(255,255,255,0.6); font-size: 14px; text-align: center; max-width: 280px; line-height: 1.5; }
+        #btn-google-login {
+            display: flex; align-items: center; gap: 12px;
+            background: white; color: #333; border: none;
+            padding: 14px 28px; border-radius: 50px;
+            font-size: 15px; font-weight: 600; cursor: pointer;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        #btn-google-login:active { transform: scale(0.97); }
+        #login-error { display: none; color: #ff4d6d; font-size: 13px; text-align: center; }
+        #login-user-bar {
+            display: flex; align-items: center; gap: 8px;
+            padding: 6px 10px; background: var(--btn-action-bg);
+            border-radius: 20px; font-size: 12px; color: var(--text-muted);
+        }
+        #btn-signout {
+            background: none; border: none; cursor: pointer;
+            font-size: 11px; color: var(--danger); padding: 2px 6px;
+            border-radius: 4px; font-weight: 600;
+        }
+
+        /* ── PIN SCREEN ── */
+        #pin-screen { display: none; position: fixed; inset: 0; background: var(--primary); z-index: 99999; flex-direction: column; align-items: center; justify-content: center; gap: 24px; }
+        #pin-screen.active { display: flex; }
+        #pin-logo { font-size: 2.4em; color: var(--header-text); font-weight: bold; letter-spacing: 1px; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; }
+        #pin-logo span { color: rgba(255,255,255,0.75); }
+        #pin-dots { display: flex; gap: 18px; margin: 8px 0; }
+        .pin-dot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.5); background: transparent; transition: background 0.15s, border-color 0.15s; }
+        .pin-dot.filled { background: var(--accent); border-color: var(--accent); }
+        #pin-msg { color: rgba(255,255,255,0.7); font-size: 14px; min-height: 20px; }
+        #pin-msg.error { color: #ff4d6d; animation: shake 0.4s; }
+        @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-8px)} 60%{transform:translateX(8px)} }
+        #pin-keypad { display: grid; grid-template-columns: repeat(3, 72px); gap: 12px; }
+        .pin-key { height: 72px; border-radius: 50%; border: none; background: rgba(255,255,255,0.1); color: white; font-size: 1.5em; font-weight: 600; cursor: pointer; transition: background 0.15s, transform 0.1s; display: flex; align-items: center; justify-content: center; }
+        .pin-key:active { background: rgba(255,255,255,0.25); transform: scale(0.93); }
+        .pin-key.del { font-size: 1.1em; background: rgba(231,76,60,0.25); }
+        .pin-key.zero { grid-column: 2; }
+
+        /* ── SETTINGS MODAL ── */
+        #settings-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 9998; align-items: center; justify-content: center; }
+        #settings-modal.active { display: flex; }
+        #settings-box { background: var(--white); border-radius: 16px; padding: 28px 24px 24px; max-width: 420px; width: 92%; box-shadow: 0 12px 48px rgba(0,0,0,0.3); max-height: 90vh; overflow-y: auto; }
+        #settings-box h2 { margin: 0 0 20px; font-size: 1.2em; color: var(--text); display: flex; align-items: center; gap: 8px; }
+        .settings-section { margin-bottom: 18px; border-bottom: 1px solid var(--border); padding-bottom: 18px; }
+        .settings-section:last-child { border-bottom: none; }
+        .settings-section > .section-label { font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.6px; }
+        .settings-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+        .settings-row label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .settings-row input[type="password"] { width: 100%; box-sizing: border-box; padding: 11px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 16px; letter-spacing: 6px; background: var(--input-bg); color: var(--text); }
+        .btn-settings-save { background: var(--accent); color: white; border: none; padding: 13px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 15px; width: 100%; margin-top: 4px; }
+        .btn-settings-close { background: var(--btn-action-bg); color: var(--text); border: 1px solid var(--border); padding: 11px 20px; border-radius: 8px; font-size: 14px; cursor: pointer; }
+        .settings-msg { font-size: 13px; min-height: 18px; margin-top: 4px; }
+        .settings-msg.ok { color: var(--success); }
+        .settings-msg.err { color: var(--danger); }
+        .toggle-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; }
+        .toggle-row span { font-size: 14px; color: var(--text); }
+
+        /* Toggle switch */
+        .toggle-switch { position: relative; display: inline-block; width: 46px; height: 26px; flex-shrink: 0; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider { position: absolute; inset: 0; background: #888; border-radius: 26px; cursor: pointer; transition: background 0.2s; }
+        .toggle-slider:before { content: ""; position: absolute; height: 20px; width: 20px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: transform 0.2s; }
+        .toggle-switch input:checked + .toggle-slider { background: var(--accent); }
+        .toggle-switch input:checked + .toggle-slider:before { transform: translateX(20px); }
+
+        .btn-backup-export { background: var(--accent); color: white; border: none; padding: 13px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; width: 100%; }
+        .btn-backup-import { background: var(--btn-clone-bg); color: var(--btn-clone-color); border: 2px dashed var(--btn-clone-border); padding: 13px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; width: 100%; }
+        .btn-backup-import:hover { border-style: solid; }
+
+        #btn-settings { background: none; border: none; cursor: pointer; font-size: 1.4em; padding: 4px 8px; border-radius: 6px; }
+        #btn-settings:hover { background: var(--btn-action-bg); }
+
+        /* ── TUTORIAL OVERLAY ── */
+        #tutorial-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.72); z-index: 99990;
+            align-items: flex-end; justify-content: center;
+            padding-bottom: env(safe-area-inset-bottom, 0px);
+        }
+        #tutorial-overlay.active { display: flex; }
+        #tutorial-card {
+            background: var(--white); border-radius: 24px 24px 0 0;
+            padding: 28px 24px 32px; max-width: 480px; width: 100%;
+            box-shadow: 0 -8px 40px rgba(0,0,0,0.35);
+            animation: slideUp 0.35s cubic-bezier(.22,.68,0,1.2);
+        }
+        @keyframes slideUp { from { transform: translateY(100%); opacity:0; } to { transform: translateY(0); opacity:1; } }
+        .tut-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+        .tut-steps { display: flex; gap: 5px; }
+        .tut-step-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transition: background 0.25s, transform 0.25s; }
+        .tut-step-dot.active { background: var(--accent); transform: scale(1.35); }
+        .tut-step-dot.done { background: var(--success); }
+        #tut-skip { background: none; border: none; color: var(--text-muted); font-size: 13px; cursor: pointer; padding: 4px 0; }
+        .tut-icon { font-size: 2.8em; text-align: center; margin-bottom: 10px; }
+        .tut-title { font-size: 1.15em; font-weight: 700; color: var(--text); margin-bottom: 8px; text-align: center; }
+        .tut-body { font-size: 14px; color: var(--text-muted); line-height: 1.65; text-align: center; margin-bottom: 24px; }
+        .tut-body strong { color: var(--text); }
+        .tut-footer { display: flex; gap: 10px; }
+        #tut-back { flex: 0 0 auto; background: var(--btn-action-bg); color: var(--text); border: 1px solid var(--border); padding: 13px 20px; border-radius: 12px; font-size: 14px; cursor: pointer; font-weight: 600; }
+        #tut-next { flex: 1; background: var(--accent); color: white; border: none; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; transition: opacity 0.15s; }
+        #tut-next:active { opacity: 0.82; }
+
+        /* ── THEME PICKER ── */
+        .theme-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .theme-card {
+            border-radius: 12px; padding: 10px 6px 8px; cursor: pointer;
+            border: 2px solid transparent; text-align: center;
+            transition: border-color 0.2s, transform 0.15s, box-shadow 0.2s;
+        }
+        .theme-card:hover { transform: scale(1.05); }
+        .theme-card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+        .theme-swatch {
+            width: 100%; height: 26px; border-radius: 6px; margin-bottom: 6px;
+            display: flex; overflow: hidden;
+        }
+        .theme-swatch span { flex: 1; display: block; }
+        .theme-card .theme-name { font-size: 11px; font-weight: 700; white-space: nowrap; display: block; }
+        .theme-card .theme-emoji { font-size: 16px; display: block; margin-bottom: 2px; }
+
+        /* ── LANGUAGE PICKER ── */
+        .lang-grid { display: flex; gap: 10px; }
+        .lang-btn {
+            flex: 1; padding: 10px 6px; border-radius: 10px; border: 2px solid var(--border);
+            background: var(--btn-clone-bg); color: var(--text); cursor: pointer;
+            font-size: 13px; font-weight: 600; text-align: center;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .lang-btn.selected { border-color: var(--accent); background: var(--accent); color: #fff; }
+        .lang-btn:hover:not(.selected) { border-color: var(--accent); }
+
+        /* ── PRIVACY MODAL ── */
+        #privacy-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 10000; align-items: center; justify-content: center; }
+        #privacy-modal.active { display: flex; }
+        #privacy-box {
+            background: var(--white); border-radius: 16px; padding: 28px 24px 24px;
+            max-width: 520px; width: 94%; box-shadow: 0 12px 48px rgba(0,0,0,0.35);
+            max-height: 88vh; display: flex; flex-direction: column;
+        }
+        #privacy-box h2 { margin: 0 0 16px; font-size: 1.15em; color: var(--text); display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+        #privacy-content {
+            overflow-y: auto; flex: 1; padding-right: 4px;
+            font-size: 13px; line-height: 1.65; color: var(--text);
+        }
+        #privacy-content h3 {
+            font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px;
+            color: var(--accent); margin: 18px 0 6px;
+            background: none; border: none; box-shadow: none; padding: 0;
+        }
+        #privacy-content p { margin: 0 0 8px; }
+        #privacy-content ul { margin: 0 0 8px; padding-left: 18px; }
+        #privacy-content li { margin-bottom: 3px; }
+        .privacy-footer { flex-shrink: 0; display: flex; justify-content: flex-end; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+        .btn-privacy-link {
+            background: none; border: none; color: var(--accent); cursor: pointer;
+            font-size: 13px; padding: 0; text-decoration: underline; text-align: left;
+        }
+        .btn-privacy-link:hover { opacity: 0.75; }
     </style>
 </head>
 
 <body>
 
+<!-- ── LOGIN SCREEN ── -->
+<div id="login-screen" class="active">
+    <div id="login-logo">💎 Finanse <span>PRO</span></div>
+    <div id="login-subtitle">Zaloguj się, aby synchronizować dane między urządzeniami</div>
+    <button id="btn-google-login" onclick="signInWithGoogle()">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
+        Zaloguj przez Google
+    </button>
+    <div id="login-error">Błąd logowania. Spróbuj ponownie.</div>
+</div>
+
+<!-- ── APP CONTENT ── -->
+<div id="app-content" style="display:none">
+
+<!-- ── TUTORIAL OVERLAY ── -->
+<div id="tutorial-overlay">
+    <div id="tutorial-card">
+        <div class="tut-header">
+            <div class="tut-steps" id="tut-dots"></div>
+            <button id="tut-skip" onclick="tutorialClose()"></button>
+        </div>
+        <div class="tut-icon" id="tut-icon"></div>
+        <div class="tut-title" id="tut-title"></div>
+        <div class="tut-body" id="tut-body"></div>
+        <div class="tut-footer">
+            <button id="tut-back" onclick="tutorialPrev()">←</button>
+            <button id="tut-next" onclick="tutorialNext()"></button>
+        </div>
+    </div>
+</div>
+
+<!-- ── PIN SCREEN ── -->
+<div id="pin-screen">
+    <div id="pin-logo">💎 Finanse <span>PRO</span></div>
+    <div id="pin-dots">
+        <div class="pin-dot" id="dot-0"></div>
+        <div class="pin-dot" id="dot-1"></div>
+        <div class="pin-dot" id="dot-2"></div>
+        <div class="pin-dot" id="dot-3"></div>
+    </div>
+    <div id="pin-msg"></div>
+    <div id="pin-keypad">
+        <button class="pin-key" onclick="pinKey('1')">1</button>
+        <button class="pin-key" onclick="pinKey('2')">2</button>
+        <button class="pin-key" onclick="pinKey('3')">3</button>
+        <button class="pin-key" onclick="pinKey('4')">4</button>
+        <button class="pin-key" onclick="pinKey('5')">5</button>
+        <button class="pin-key" onclick="pinKey('6')">6</button>
+        <button class="pin-key" onclick="pinKey('7')">7</button>
+        <button class="pin-key" onclick="pinKey('8')">8</button>
+        <button class="pin-key" onclick="pinKey('9')">9</button>
+        <button class="pin-key zero" onclick="pinKey('0')">0</button>
+        <button class="pin-key del" onclick="pinDel()">⌫</button>
+    </div>
+    <div id="pin-default-hint" style="color: rgba(255,255,255,0.35); font-size: 12px; margin-top: 8px;"></div>
+</div>
+
+<!-- ── SETTINGS MODAL ── -->
+<div id="settings-modal">
+    <div id="settings-box">
+        <h2>⚙️ <span data-i18n="settings_title"></span></h2>
+
+        <!-- LANGUAGE PICKER -->
+        <div class="settings-section">
+            <span class="section-label" data-i18n="settings_language"></span>
+            <div class="lang-grid">
+                <button class="lang-btn" id="lang-pl" onclick="setLanguage('pl')">🇵🇱 Polski</button>
+                <button class="lang-btn" id="lang-en" onclick="setLanguage('en')">🇬🇧 English</button>
+            </div>
+        </div>
+
+        <!-- THEME PICKER -->
+        <div class="settings-section">
+            <span class="section-label" data-i18n="settings_theme"></span>
+            <div class="theme-grid" id="theme-grid"></div>
+        </div>
+
+        <!-- PIN TOGGLE -->
+        <div class="settings-section">
+            <span class="section-label" data-i18n="settings_security"></span>
+            <div class="toggle-row">
+                <span data-i18n="settings_pin_login"></span>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="pin-enabled-toggle" onchange="togglePinEnabled()">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <!-- PIN CHANGE -->
+        <div class="settings-section" id="pin-change-section">
+            <span class="section-label" data-i18n="settings_change_pin"></span>
+            <div class="settings-row">
+                <label data-i18n="pin_current"></label>
+                <input type="password" id="pin-current" maxlength="4" inputmode="numeric" data-i18n-placeholder="pin_current">
+            </div>
+            <div class="settings-row">
+                <label data-i18n="pin_new"></label>
+                <input type="password" id="pin-new" maxlength="4" inputmode="numeric" data-i18n-placeholder="pin_new">
+            </div>
+            <div class="settings-row">
+                <label data-i18n="pin_repeat"></label>
+                <input type="password" id="pin-repeat" maxlength="4" inputmode="numeric" data-i18n-placeholder="pin_repeat">
+            </div>
+            <button class="btn-settings-save" onclick="changePIN()" data-i18n="save"></button>
+            <div class="settings-msg" id="pin-settings-msg"></div>
+        </div>
+
+        <!-- BACKUP -->
+        <div class="settings-section">
+            <span class="section-label" data-i18n="settings_backup"></span>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+                <button class="btn-backup-export" onclick="exportBackup()" data-i18n="backup_export"></button>
+                <button class="btn-backup-import" onclick="document.getElementById('backup-file-input').click()" data-i18n="backup_import"></button>
+                <input type="file" id="backup-file-input" accept=".json" style="display:none" onchange="importBackup(this)">
+                <div class="settings-msg" id="backup-msg"></div>
+            </div>
+        </div>
+
+        <!-- PRIVACY POLICY -->
+        <div class="settings-section">
+            <span class="section-label" data-i18n="settings_privacy"></span>
+            <button class="btn-privacy-link" onclick="openPrivacy()" data-i18n="privacy_read"></button>
+        </div>
+
+        <!-- TUTORIAL -->
+        <div class="settings-section">
+            <span class="section-label" data-i18n="settings_tutorial_label"></span>
+            <button class="btn-backup-export" style="background:var(--success)" onclick="closeSettings(); tutorialStart();" data-i18n="settings_tutorial_btn"></button>
+        </div>
+
+        <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:4px;">
+            <button class="btn-settings-close" onclick="closeSettings()" data-i18n="close"></button>
+        </div>
+    </div>
+</div>
+
+<!-- ── PRIVACY POLICY MODAL ── -->
+<div id="privacy-modal">
+    <div id="privacy-box">
+        <h2>🔏 <span data-i18n="privacy_title"></span></h2>
+        <div id="privacy-content"></div>
+        <div class="privacy-footer">
+            <button class="btn-settings-close" onclick="closePrivacy()" data-i18n="close"></button>
+        </div>
+    </div>
+</div>
+
+<!-- Delete confirmation modal -->
+<div id="confirm-modal">
+    <div id="confirm-box">
+        <p data-i18n="confirm_delete"></p>
+        <div class="confirm-btns">
+            <button class="btn-confirm-yes" id="confirm-yes" data-i18n="delete"></button>
+            <button class="btn-confirm-no" id="confirm-no" data-i18n="cancel"></button>
+        </div>
+    </div>
+</div>
+
 <header>
-    <h2 style="margin: 5px 0;">💎 Finanse PRO</h2>
+    <h2 style="margin: 5px 0;">&#128142; Finanse PRO</h2>
 </header>
 
 <div id="topbar">
-    <button class="btn-action" onclick="prevYear()">◀</button>
+    <button class="btn-action" onclick="prevYear()">&#9664;</button>
     <div style="text-align: center;">
         <span id="year" style="font-weight:bold; font-size:1.3em; display: block;"></span>
-        <button onclick="goToToday()" style="font-size: 10px; border: none; background: #eee; border-radius: 4px; padding: 2px 8px; cursor: pointer;">Pokaż DZISIAJ</button>
+        <button onclick="goToToday()" style="font-size: 10px; border: none; background: var(--btn-action-bg); color: var(--text); border-radius: 4px; padding: 2px 8px; cursor: pointer;" data-i18n="go_today"></button>
     </div>
-    <button class="btn-action" onclick="nextYear()">▶</button>
+    <div style="display:flex; align-items:center; gap:6px;">
+        <div id="login-user-bar">
+            <span id="login-user-info"></span>
+            <button id="btn-signout" onclick="signOutGoogle()" title="Wyloguj">⏏</button>
+        </div>
+        <button id="btn-settings" onclick="openSettings()" data-i18n-title="settings_title">⚙️</button>
+        <button class="btn-action" onclick="nextYear()">&#9654;</button>
+    </div>
 </div>
 
 <div id="months"></div>
 
 <div class="container">
-    <h3>📈 Dochody</h3>
+    <h3>&#128200; <span data-i18n="income"></span></h3>
     <table>
-        <thead><tr><th style="width:30px">#</th><th>Nazwa i kwota</th><th style="width:40px">🗑️</th></tr></thead>
+        <thead><tr><th style="width:30px">#</th><th data-i18n="name_and_amount"></th><th style="width:40px">&#128465;</th></tr></thead>
         <tbody id="incomeBody"></tbody>
     </table>
-    <button class="btn-add" onclick="addIncome()">➕ Dodaj Dochód</button>
-    <button class="btn-clone" onclick="cloneIncome()">📋 Kopiuj dochód na kolejny miesiąc</button>
+    <button class="btn-add" onclick="addIncome()">&#10133; <span data-i18n="add_income"></span></button>
+    <button class="btn-clone" onclick="cloneIncome()">&#128203; <span data-i18n="clone_income"></span></button>
 
-    <h3>💸 Wydatki Miesięczne</h3>
+    <h3>&#128184; <span data-i18n="monthly_expenses"></span></h3>
     <table>
         <colgroup><col style="width: 25px;"><col><col style="width: 85px;"><col style="width: 35px;"><col style="width: 35px;"><col style="width: 40px;"></colgroup>
         <thead>
-            <tr><th>#</th><th>Opis / Źródło / Data</th><th>Kwota</th><th>ZAPŁ.</th><th>CZĘŚĆ.</th><th>AKCJA</th></tr>
+            <tr>
+                <th>#</th>
+                <th data-i18n="desc_source_date"></th>
+                <th data-i18n="amount"></th>
+                <th data-i18n="paid_short"></th>
+                <th data-i18n="partial_short"></th>
+                <th data-i18n="action"></th>
+            </tr>
         </thead>
         <tbody id="expenseBody"></tbody>
     </table>
-    <button class="btn-add" onclick="addExpense()">➕ Dodaj Wydatek</button>
-    <button class="btn-clone" onclick="cloneExpenses()">📋 Kopiuj wydatki na kolejny miesiąc</button>
+    <button class="btn-add" onclick="addExpense()">&#10133; <span data-i18n="add_expense"></span></button>
+    <button class="btn-clone" onclick="cloneExpenses()">&#128203; <span data-i18n="clone_expenses"></span></button>
 
-    <h3>🏦 Źródła spłaty (Status kont)</h3>
+    <h3>&#127974; <span data-i18n="payment_sources"></span></h3>
     <div id="banks"></div>
 
     <div class="summary-box">
-        <div>Dochody ogółem:<br><span class="summary-val" id="sumIncome">0</span> zł</div>
-        <div>Wydatki ogółem:<br><span class="summary-val" id="sumExpense">0</span> zł</div>
+        <div><span data-i18n="total_income"></span>:<br><span class="summary-val" id="sumIncome">0</span> zł</div>
+        <div><span data-i18n="total_expenses"></span>:<br><span class="summary-val" id="sumExpense">0</span> zł</div>
         <div style="grid-column: span 2; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 10px; margin-top: 5px;">
-            Pozostaje do dyspozycji:<br><span class="summary-val" id="balance" style="font-size: 1.5em; color: #5dade2;">0</span> zł
+            <span data-i18n="remaining"></span>:<br><span class="summary-val" id="balance" style="font-size: 1.5em; color: var(--balance-color);">0</span> zł
         </div>
     </div>
 
-    <h3 style="border-left-color: var(--reminder)">🔔 Przypomnienia</h3>
+    <div class="export-bar">
+        <button class="btn-export btn-export-pdf" onclick="exportPDF()">&#128424; <span data-i18n="export_pdf"></span></button>
+        <button class="btn-export btn-export-csv" onclick="exportCSV()">&#128202; <span data-i18n="export_csv"></span></button>
+    </div>
+
+    <h3 style="border-left-color: var(--reminder)">&#128276; <span data-i18n="reminders"></span></h3>
     <table>
-        <thead><tr><th style="width:40px">#</th><th>Czynność / Termin</th><th style="width:40px">🗑️</th></tr></thead>
+        <thead><tr><th style="width:40px">#</th><th data-i18n="task_deadline"></th><th style="width:40px">&#128465;</th></tr></thead>
         <tbody id="reminderBody"></tbody>
     </table>
-    <button class="btn-add" style="background:var(--reminder)" onclick="addReminder()">➕ Dodaj Przypomnienie</button>
-    <button class="btn-clone" onclick="cloneReminders()">📋 Kopiuj przypomnienia na kolejny miesiąc</button>
+    <button class="btn-add" style="background:var(--reminder)" onclick="addReminder()">&#10133; <span data-i18n="add_reminder"></span></button>
+    <button class="btn-clone" onclick="cloneReminders()">&#128203; <span data-i18n="clone_reminders"></span></button>
 
-    <h3 style="border-left-color: var(--primary)">🛡️ Wydatki Długoterminowe</h3>
+    <h3 style="border-left-color: var(--primary)">&#128737; <span data-i18n="long_term_expenses"></span></h3>
     <table>
-        <thead><tr><th style="width:40px">#</th><th>Zobowiązanie / Termin</th><th>Kwota</th><th style="width:40px">🗑️</th></tr></thead>
+        <thead><tr><th style="width:40px">#</th><th data-i18n="obligation_deadline"></th><th data-i18n="amount"></th><th style="width:40px">&#128465;</th></tr></thead>
         <tbody id="longTermBody"></tbody>
     </table>
-    <button class="btn-add" style="background:var(--primary)" onclick="addLongTerm()">➕ Dodaj Wydatek Długoterminowy</button>
+    <button class="btn-add" style="background:var(--primary)" onclick="addLongTerm()">&#10133; <span data-i18n="add_long_term"></span></button>
 
-    <h3>🌴 Planowanie: URLOP I WAKACJE</h3>
-    <textarea id="vacation" style="height:80px; margin-bottom: 5px;" placeholder="Miejsce docelowe, termin, budżet..." oninput="update()"></textarea>
-    <button class="btn-clone" onclick="cloneVacation()">📋 Kopiuj plany na kolejny miesiąc</button>
+    <h3>&#127796; <span data-i18n="vacation_planning"></span></h3>
+    <textarea id="vacation" style="height:80px; margin-bottom: 5px;" data-i18n-placeholder="vacation_placeholder" oninput="update()"></textarea>
+    <button class="btn-clone" onclick="cloneVacation()">&#128203; <span data-i18n="clone_vacation"></span></button>
 
-    <h3>📅 Kalendarz</h3>
+    <h3>&#128197; <span data-i18n="calendar"></span></h3>
     <div id="mini-calendar"></div>
 
-    <h3>📝 Notatki</h3>
-    <textarea id="notes" style="height:100px; margin-bottom: 40px;" placeholder="Dodatkowe informacje..." oninput="update()"></textarea>
+    <h3>&#128221; <span data-i18n="notes"></span></h3>
+    <textarea id="notes" style="height:100px; margin-bottom: 40px;" data-i18n-placeholder="notes_placeholder" oninput="update()"></textarea>
 </div>
 
 <script>
+/* ══════════════════════════════════════════════
+   TRANSLATIONS
+══════════════════════════════════════════════ */
+const TRANSLATIONS = {
+    pl: {
+        // UI labels
+        settings_title: "Ustawienia",
+        settings_language: "🌐 Język / Language",
+        settings_theme: "🎨 Motyw aplikacji",
+        settings_security: "🔒 Bezpieczeństwo",
+        settings_pin_login: "Logowanie PIN-em",
+        settings_change_pin: "Zmień PIN",
+        save: "Zapisz",
+        close: "Zamknij",
+        confirm_delete: "Czy na pewno chcesz usunąć ten wiersz?",
+        delete: "Usuń",
+        cancel: "Anuluj",
+        go_today: "Pokaż DZISIAJ",
+        // Sections
+        income: "Dochody",
+        monthly_expenses: "Wydatki Miesięczne",
+        payment_sources: "Źródła spłaty (Status kont)",
+        reminders: "Przypomnienia",
+        long_term_expenses: "Wydatki Długoterminowe",
+        vacation_planning: "Planowanie: URLOP I WAKACJE",
+        calendar: "Kalendarz",
+        notes: "Notatki",
+        // Table headers
+        name_and_amount: "Nazwa i kwota",
+        desc_source_date: "Opis / Źródło / Data",
+        amount: "Kwota",
+        paid_short: "ZAPŁ.",
+        partial_short: "CZĘŚC.",
+        action: "AKCJA",
+        task_deadline: "Czynność / Termin",
+        obligation_deadline: "Zobowiązanie / Termin",
+        total_income: "Dochody ogółem",
+        total_expenses: "Wydatki ogółem",
+        remaining: "Pozostaje do dyspozycji",
+        // Buttons
+        add_income: "Dodaj Dochód",
+        add_expense: "Dodaj Wydatek",
+        add_reminder: "Dodaj Przypomnienie",
+        add_long_term: "Dodaj Wydatek Długoterminowy",
+        clone_income: "Kopiuj dochód na kolejny miesiąc",
+        clone_expenses: "Kopiuj wydatki na kolejny miesiąc",
+        clone_reminders: "Kopiuj przypomnienia na kolejny miesiąc",
+        clone_vacation: "Kopiuj plany na kolejny miesiąc",
+        export_pdf: "Eksport PDF",
+        export_csv: "Eksport CSV",
+        // Placeholders
+        vacation_placeholder: "Miejsce docelowe, termin, budżet...",
+        notes_placeholder: "Dodatkowe informacje...",
+        // PIN
+        pin_enter: "Wprowadź PIN",
+        pin_set_new: "Ustaw nowy PIN (4 cyfry)",
+        pin_wrong: "Nieprawidłowy PIN – spróbuj ponownie",
+        pin_default: "Domyślny PIN: 1234",
+        pin_current: "Aktualny PIN",
+        pin_new: "Nowy PIN (4 cyfry)",
+        pin_repeat: "Powtórz nowy PIN",
+        pin_saved: "PIN został zapisany. Logowanie włączone ✓",
+        pin_enabled: "Logowanie PIN-em zostało włączone.",
+        pin_disabled: "Logowanie PIN-em zostało wyłączone.",
+        pin_set_below: "Ustaw PIN poniżej, aby włączyć ochronę.",
+        pin_wrong_current: "Aktualny PIN jest nieprawidłowy.",
+        pin_4digits: "Nowy PIN musi mieć dokładnie 4 cyfry.",
+        pin_no_match: "Nowe PINy nie są zgodne.",
+        // Alerts
+        alert_income_copied: "Skopiowano dochody!",
+        alert_expenses_copied: "Skopiowano wydatki!",
+        alert_reminders_copied: "Skopiowano przypomnienia!",
+        alert_vacation_copied: "Skopiowano plany!",
+        // Inline dynamic
+        placeholder_what: "Co?",
+        placeholder_name: "Nazwa",
+        placeholder_task: "Zadanie",
+        placeholder_obligation: "Zobowiązanie",
+        placeholder_payment_source: "Źródło spłaty",
+        placeholder_paid: "Wpłacono",
+        remaining_label: "Reszta",
+        unspecified: "Nieokreślone",
+        // Months
+        months: ["Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec","Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"],
+        cal_days: ["Pn","Wt","Śr","Cz","Pt","So","Nd"],
+        // PDF/CSV
+        pdf_no_data: "Brak danych",
+        pdf_generated: "Wygenerowano",
+        pdf_income_total: "Dochody ogółem",
+        pdf_expense_total: "Wydatki ogółem",
+        pdf_balance: "Pozostaje do dyspozycji",
+        pdf_income_section: "Dochody",
+        pdf_expense_section: "Wydatki",
+        pdf_notes_section: "Notatki",
+        pdf_vacation_section: "Urlop i Wakacje",
+        pdf_col_name: "Nazwa",
+        pdf_col_amount: "Kwota",
+        pdf_col_desc: "Opis / Źródło / Data",
+        pdf_col_status: "Status",
+        pdf_paid: "Zapłacone",
+        pdf_partial: "Częściowo",
+        pdf_unpaid: "Niezapłacone",
+        pdf_rest: "reszta",
+        csv_month: "Miesiąc",
+        csv_type: "Typ",
+        csv_name: "Nazwa",
+        csv_source: "Źródło spłaty",
+        csv_date: "Data",
+        csv_amount: "Kwota (zł)",
+        csv_status: "Status",
+        csv_paid_amount: "Wpłacono (zł)",
+        csv_remaining: "Reszta (zł)",
+        csv_income: "Dochód",
+        csv_expense: "Wydatek",
+        // Tutorial
+        settings_tutorial_label: "🎓 Samouczek",
+        settings_tutorial_btn: "▶ URUCHOM SAMOUCZEK",
+        tut_skip: "Pomiń",
+        tut_next: "Dalej →",
+        tut_finish: "Zaczynamy! 🚀",
+        tut_back: "←",
+        tut_steps: [
+            {
+                icon: "💎",
+                title: "Witaj w Finanse PRO!",
+                body: "To szybki przewodnik po najważniejszych funkcjach aplikacji. Zajmie Ci tylko chwilę. Możesz go pominąć w dowolnym momencie."
+            },
+            {
+                icon: "📅",
+                title: "Nawigacja po miesiącach",
+                body: "Na górze ekranu znajdziesz <strong>pasek miesięcy</strong>. Dotknij dowolnego miesiąca, aby go wybrać. Strzałkami obok roku możesz przechodzić między latami. Przycisk <strong>&#8222;Pokaż DZISIAJ&#8221;</strong> przeniesie Cię od razu do bieżącego miesiąca."
+            },
+            {
+                icon: "📈",
+                title: "Dodawanie dochodów",
+                body: "Kliknij <strong>&#8222;+ Dodaj Dochód&#8221;</strong>, aby wpisać swoje przychody. Każdy dochód ma nazwę i kwotę. Możesz dodać tyle pozycji, ile potrzebujesz."
+            },
+            {
+                icon: "💸",
+                title: "Zarządzanie wydatkami",
+                body: "W sekcji <strong>Wydatki Miesięczne</strong> możesz śledzić każdy rachunek. Zaznacz ✔ <strong>ZAPŁ.</strong> gdy opłacisz, lub ✔ <strong>CZĘŚC.</strong> przy częściowej wpłacie — wtedy wpisz ile już zapłaciłeś."
+            },
+            {
+                icon: "📋",
+                title: "Kopiowanie na kolejny miesiąc",
+                body: "Nie musisz wpisywać wszystkiego od nowa! Przyciski <strong>&#8222;Kopiuj na kolejny miesiąc&#8221;</strong> przeniosą Twoje dochody, wydatki lub przypomnienia do następnego miesiąca — z automatycznym przesunięciem dat."
+            },
+            {
+                icon: "📤",
+                title: "Eksport danych",
+                body: "W każdej chwili możesz wyeksportować swoje dane do pliku <strong>PDF</strong> (gotowy raport do wydruku) lub <strong>CSV</strong> (do arkusza kalkulacyjnego). Znajdziesz te przyciski pod podsumowaniem finansowym."
+            },
+            {
+                icon: "⚙️",
+                title: "Ustawienia i bezpieczeństwo",
+                body: "Ikona <strong>⚙️</strong> w prawym górnym rogu otwiera ustawienia. Możesz tam zmienić język, motyw kolorystyczny oraz ustawić <strong>kod PIN</strong>, który chroni dostęp do Twoich danych."
+            },
+            {
+                icon: "☁️",
+                title: "Synchronizacja z chmurą",
+                body: "Twoje dane są automatycznie zapisywane w chmurze. Możesz korzystać z aplikacji na różnych urządzeniach — dane synchronizują się na bieżąco. W ustawieniach znajdziesz też opcję <strong>kopii zapasowej</strong>."
+            }
+        ],
+        // Backup
+        settings_backup: "💾 Kopia zapasowa",
+        backup_export: "⬇ EKSPORTUJ BACKUP",
+        backup_import: "⬆ WCZYTAJ BACKUP",
+        backup_export_ok: "Backup wyeksportowany pomyślnie!",
+        backup_import_ok: "Backup wczytany pomyślnie! Dane zostały przywrócone.",
+        backup_import_err: "Błąd: nieprawidłowy plik backup.",
+        backup_import_confirm: "Czy na pewno chcesz wczytać backup? Obecne dane zostaną zastąpione.",
+        // Privacy
+        settings_privacy: "📄 Polityka prywatności",
+        privacy_read: "Przeczytaj politykę prywatności →",
+        privacy_title: "Polityka prywatności",
+        privacy_html: `
+            <h3>1. Informacje ogólne</h3>
+            <p>Aplikacja <strong>Finanse PRO</strong> jest narzędziem do osobistego zarządzania budżetem domowym. Przywiązujemy dużą wagę do ochrony Twoich danych.</p>
+
+            <h3>2. Jakie dane są przechowywane?</h3>
+            <ul>
+                <li><strong>Dane finansowe</strong> – dochody, wydatki, przypomnienia, notatki i plany urlopowe, które sam wprowadzasz.</li>
+                <li><strong>Preferencje aplikacji</strong> – wybrany motyw, język, ustawienia PIN (PIN przechowywany wyłącznie lokalnie).</li>
+                <li><strong>Identyfikator anonimowy</strong> – Firebase Authentication nadaje Twojemu urządzeniu losowy identyfikator, który nie jest powiązany z żadnymi danymi osobowymi.</li>
+                <li><strong>Plik kopii zapasowej</strong> – korzystając z funkcji &#8222;Eksportuj Backup", możesz zapisać wszystkie dane finansowe jako plik JSON na swoim urządzeniu. Plik ten zawiera pełen zestaw Twoich danych i jest generowany wyłącznie na Twoje żądanie.</li>
+            </ul>
+
+            <h3>3. Gdzie są przechowywane dane?</h3>
+            <ul>
+                <li><strong>Lokalnie</strong> – w pamięci przeglądarki (localStorage) na Twoim urządzeniu.</li>
+                <li><strong>W chmurze</strong> – w usłudze Google Firebase Firestore przypisanej do anonimowego konta, dostępnej wyłącznie z Twojego urządzenia.</li>
+                <li><strong>Plik backup</strong> – eksportowany plik kopii zapasowej jest zapisywany bezpośrednio na Twoim urządzeniu (np. w folderze Pobrane). Aplikacja nie przesyła tego pliku nigdzie — odpowiedzialność za jego bezpieczeństwo i przechowywanie spoczywa wyłącznie na Tobie.</li>
+            </ul>
+
+            <h3>4. Dostęp do danych</h3>
+            <p>Twoje dane finansowe są powiązane z anonimowym identyfikatorem sesji. Nikt inny – w tym twórcy aplikacji – nie ma dostępu do Twoich zapisanych danych.</p>
+
+            <h3>5. Udostępnianie danych</h3>
+            <p>Aplikacja <strong>nie udostępnia</strong> żadnych danych osobom trzecim, reklamodawcom ani innym podmiotom. Dane nie są sprzedawane ani przetwarzane w celach marketingowych.</p>
+
+            <h3>6. Usuwanie danych</h3>
+            <p>Możesz usunąć wszystkie dane lokalnie, czyszcząc pamięć przeglądarki (localStorage). Dane w chmurze są powiązane z anonimową sesją Firebase – zostaną automatycznie usunięte po wygaśnięciu sesji lub można je usunąć ręcznie z konsoli Firebase.</p>
+
+            <h3>6a. Kopia zapasowa (Backup)</h3>
+            <p>Funkcja eksportu backupu generuje plik JSON zawierający wszystkie Twoje dane finansowe. Plik jest zapisywany lokalnie na Twoim urządzeniu i <strong>nie jest przesyłany</strong> na żadne serwery. Zalecamy przechowywanie pliku backup w bezpiecznym miejscu, gdyż zawiera poufne dane finansowe. Funkcja wczytywania backupu zastępuje bieżące dane danymi z wybranego pliku — przed wczytaniem aplikacja poprosi o potwierdzenie tej operacji.</p>
+
+            <h3>7. Pliki cookie i śledzenie</h3>
+            <p>Aplikacja nie używa plików cookie ani narzędzi śledzących w celach reklamowych. Firebase może używać technicznego przechowywania sesji wyłącznie w celu utrzymania połączenia z bazą danych.</p>
+
+            <h3>8. Bezpieczeństwo</h3>
+            <p>Zalecamy włączenie logowania PIN-em w ustawieniach, aby chronić dostęp do aplikacji na współdzielonych urządzeniach. Eksportowane pliki backup przechowuj w miejscu niedostępnym dla osób nieuprawnionych.</p>
+
+            <h3>9. Zmiany polityki</h3>
+            <p>Wszelkie zmiany niniejszej polityki będą uwzględniane w kolejnych aktualizacjach aplikacji.</p>
+
+            <h3>10. Kontakt</h3>
+            <p>W razie pytań dotyczących prywatności skontaktuj się z twórcą aplikacji.</p>
+        `,
+    },
+    en: {
+        // UI labels
+        settings_title: "Settings",
+        settings_language: "🌐 Language / Język",
+        settings_theme: "🎨 App Theme",
+        settings_security: "🔒 Security",
+        settings_pin_login: "PIN Login",
+        settings_change_pin: "Change PIN",
+        save: "Save",
+        close: "Close",
+        confirm_delete: "Are you sure you want to delete this row?",
+        delete: "Delete",
+        cancel: "Cancel",
+        go_today: "Go to TODAY",
+        // Sections
+        income: "Income",
+        monthly_expenses: "Monthly Expenses",
+        payment_sources: "Payment Sources (Account Status)",
+        reminders: "Reminders",
+        long_term_expenses: "Long-Term Expenses",
+        vacation_planning: "Planning: VACATION & HOLIDAYS",
+        calendar: "Calendar",
+        notes: "Notes",
+        // Table headers
+        name_and_amount: "Name & Amount",
+        desc_source_date: "Description / Source / Date",
+        amount: "Amount",
+        paid_short: "PAID",
+        partial_short: "PART.",
+        action: "ACTION",
+        task_deadline: "Task / Deadline",
+        obligation_deadline: "Obligation / Deadline",
+        total_income: "Total Income",
+        total_expenses: "Total Expenses",
+        remaining: "Remaining Balance",
+        // Buttons
+        add_income: "Add Income",
+        add_expense: "Add Expense",
+        add_reminder: "Add Reminder",
+        add_long_term: "Add Long-Term Expense",
+        clone_income: "Copy income to next month",
+        clone_expenses: "Copy expenses to next month",
+        clone_reminders: "Copy reminders to next month",
+        clone_vacation: "Copy plans to next month",
+        export_pdf: "Export PDF",
+        export_csv: "Export CSV",
+        // Placeholders
+        vacation_placeholder: "Destination, date, budget...",
+        notes_placeholder: "Additional information...",
+        // PIN
+        pin_enter: "Enter PIN",
+        pin_set_new: "Set new PIN (4 digits)",
+        pin_wrong: "Wrong PIN – try again",
+        pin_default: "Default PIN: 1234",
+        pin_current: "Current PIN",
+        pin_new: "New PIN (4 digits)",
+        pin_repeat: "Repeat new PIN",
+        pin_saved: "PIN saved. Login enabled ✓",
+        pin_enabled: "PIN login has been enabled.",
+        pin_disabled: "PIN login has been disabled.",
+        pin_set_below: "Set a PIN below to enable protection.",
+        pin_wrong_current: "Current PIN is incorrect.",
+        pin_4digits: "New PIN must be exactly 4 digits.",
+        pin_no_match: "New PINs do not match.",
+        // Alerts
+        alert_income_copied: "Income copied!",
+        alert_expenses_copied: "Expenses copied!",
+        alert_reminders_copied: "Reminders copied!",
+        alert_vacation_copied: "Plans copied!",
+        // Inline dynamic
+        placeholder_what: "What?",
+        placeholder_name: "Name",
+        placeholder_task: "Task",
+        placeholder_obligation: "Obligation",
+        placeholder_payment_source: "Payment source",
+        placeholder_paid: "Paid amount",
+        remaining_label: "Remaining",
+        unspecified: "Unspecified",
+        // Months
+        months: ["January","February","March","April","May","June","July","August","September","October","November","December"],
+        cal_days: ["Mo","Tu","We","Th","Fr","Sa","Su"],
+        // PDF/CSV
+        pdf_no_data: "No data",
+        pdf_generated: "Generated",
+        pdf_income_total: "Total Income",
+        pdf_expense_total: "Total Expenses",
+        pdf_balance: "Remaining Balance",
+        pdf_income_section: "Income",
+        pdf_expense_section: "Expenses",
+        pdf_notes_section: "Notes",
+        pdf_vacation_section: "Vacation & Holidays",
+        pdf_col_name: "Name",
+        pdf_col_amount: "Amount",
+        pdf_col_desc: "Description / Source / Date",
+        pdf_col_status: "Status",
+        pdf_paid: "Paid",
+        pdf_partial: "Partial",
+        pdf_unpaid: "Unpaid",
+        pdf_rest: "remaining",
+        csv_month: "Month",
+        csv_type: "Type",
+        csv_name: "Name",
+        csv_source: "Payment Source",
+        csv_date: "Date",
+        csv_amount: "Amount (PLN)",
+        csv_status: "Status",
+        csv_paid_amount: "Paid (PLN)",
+        csv_remaining: "Remaining (PLN)",
+        csv_income: "Income",
+        csv_expense: "Expense",
+        // Tutorial
+        settings_tutorial_label: "🎓 Tutorial",
+        settings_tutorial_btn: "▶ START TUTORIAL",
+        tut_skip: "Skip",
+        tut_next: "Next →",
+        tut_finish: "Let's go! 🚀",
+        tut_back: "←",
+        tut_steps: [
+            {
+                icon: "💎",
+                title: "Welcome to Finanse PRO!",
+                body: "This is a quick guide to the most important features. It will only take a moment. You can skip it at any time."
+            },
+            {
+                icon: "📅",
+                title: "Navigating months",
+                body: "At the top of the screen you'll find the <strong>month bar</strong>. Tap any month to select it. Use the arrows next to the year to navigate between years. The <strong>\"Go to TODAY\"</strong> button takes you straight to the current month."
+            },
+            {
+                icon: "📈",
+                title: "Adding income",
+                body: "Click <strong>\"+ Add Income\"</strong> to enter your earnings. Each income entry has a name and amount. You can add as many entries as you need."
+            },
+            {
+                icon: "💸",
+                title: "Managing expenses",
+                body: "In the <strong>Monthly Expenses</strong> section you can track every bill. Check ✔ <strong>PAID</strong> when you've paid it, or ✔ <strong>PART.</strong> for a partial payment — then enter how much you've already paid."
+            },
+            {
+                icon: "📋",
+                title: "Copying to next month",
+                body: "No need to re-enter everything! The <strong>\"Copy to next month\"</strong> buttons move your income, expenses or reminders to the following month — with dates automatically shifted forward."
+            },
+            {
+                icon: "📤",
+                title: "Exporting data",
+                body: "At any time you can export your data as a <strong>PDF</strong> (a ready-to-print report) or <strong>CSV</strong> (for a spreadsheet). You'll find these buttons below the financial summary."
+            },
+            {
+                icon: "⚙️",
+                title: "Settings & security",
+                body: "The <strong>⚙️</strong> icon in the top right opens settings. There you can change the language, colour theme and set a <strong>PIN code</strong> to protect access to your data."
+            },
+            {
+                icon: "☁️",
+                title: "Cloud sync",
+                body: "Your data is automatically saved to the cloud. You can use the app on multiple devices — data syncs in real time. Settings also include a <strong>backup</strong> option for extra safety."
+            }
+        ],
+        // Backup
+        settings_backup: "💾 Backup",
+        backup_export: "⬇ EXPORT BACKUP",
+        backup_import: "⬆ LOAD BACKUP",
+        backup_export_ok: "Backup exported successfully!",
+        backup_import_ok: "Backup loaded successfully! Data has been restored.",
+        backup_import_err: "Error: invalid backup file.",
+        backup_import_confirm: "Are you sure you want to load a backup? Current data will be replaced.",
+        // Privacy
+        settings_privacy: "📄 Privacy Policy",
+        privacy_read: "Read Privacy Policy →",
+        privacy_title: "Privacy Policy",
+        privacy_html: `
+            <h3>1. General Information</h3>
+            <p><strong>Finanse PRO</strong> is a personal household budget management tool. We take the protection of your data seriously.</p>
+
+            <h3>2. What data is stored?</h3>
+            <ul>
+                <li><strong>Financial data</strong> – income, expenses, reminders, notes and vacation plans that you enter yourself.</li>
+                <li><strong>App preferences</strong> – selected theme, language, PIN settings (PIN stored locally only).</li>
+                <li><strong>Anonymous identifier</strong> – Firebase Authentication assigns your device a random identifier that is not linked to any personal data.</li>
+                <li><strong>Backup file</strong> – using the "Export Backup" feature, you can save all your financial data as a JSON file on your device. This file is generated solely at your request and contains your complete dataset.</li>
+            </ul>
+
+            <h3>3. Where is data stored?</h3>
+            <ul>
+                <li><strong>Locally</strong> – in your browser's localStorage on your device.</li>
+                <li><strong>In the cloud</strong> – in Google Firebase Firestore linked to an anonymous account, accessible only from your device.</li>
+                <li><strong>Backup file</strong> – the exported backup file is saved directly to your device (e.g. your Downloads folder). The app does not transmit this file anywhere — responsibility for its security and storage rests solely with you.</li>
+            </ul>
+
+            <h3>4. Data access</h3>
+            <p>Your financial data is associated with an anonymous session identifier. No one else – including the app's creators – has access to your saved data.</p>
+
+            <h3>5. Data sharing</h3>
+            <p>The app <strong>does not share</strong> any data with third parties, advertisers or other entities. Data is not sold or processed for marketing purposes.</p>
+
+            <h3>6. Data deletion</h3>
+            <p>You can delete all local data by clearing your browser's localStorage. Cloud data is linked to an anonymous Firebase session – it will be automatically removed when the session expires, or can be manually deleted from the Firebase console.</p>
+
+            <h3>6a. Backup (Export / Import)</h3>
+            <p>The backup export feature generates a JSON file containing all your financial data. The file is saved locally on your device and is <strong>not uploaded</strong> to any server. We recommend storing the backup file in a secure location, as it contains sensitive financial information. The backup import feature replaces your current data with the data from the selected file — the app will ask for confirmation before proceeding.</p>
+
+            <h3>7. Cookies and tracking</h3>
+            <p>The app does not use cookies or tracking tools for advertising purposes. Firebase may use technical session storage solely to maintain the database connection.</p>
+
+            <h3>8. Security</h3>
+            <p>We recommend enabling PIN login in settings to protect access to the app on shared devices. Keep exported backup files in a location inaccessible to unauthorised persons.</p>
+
+            <h3>9. Policy changes</h3>
+            <p>Any changes to this policy will be reflected in future app updates.</p>
+
+            <h3>10. Contact</h3>
+            <p>If you have any questions about privacy, please contact the app creator.</p>
+        `,
+    }
+};
+
+const LANG_KEY = "app_lang";
+let currentLang = localStorage.getItem(LANG_KEY) || "pl";
+
+function t(key) {
+    return TRANSLATIONS[currentLang][key] || TRANSLATIONS["pl"][key] || key;
+}
+
+function setLanguage(lang) {
+    currentLang = lang;
+    localStorage.setItem(LANG_KEY, lang);
+    applyTranslations();
+    // Re-render dynamic parts
+    renderMonths();
+    renderCalendar();
+    load();
+}
+
+function applyTranslations() {
+    // Update lang buttons
+    document.getElementById("lang-pl").classList.toggle("selected", currentLang === "pl");
+    document.getElementById("lang-en").classList.toggle("selected", currentLang === "en");
+    document.documentElement.lang = currentLang;
+
+    // data-i18n elements (text content)
+    document.querySelectorAll("[data-i18n]").forEach(el => {
+        const key = el.getAttribute("data-i18n");
+        el.textContent = t(key);
+    });
+
+    // data-i18n-placeholder elements
+    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+        const key = el.getAttribute("data-i18n-placeholder");
+        el.placeholder = t(key);
+    });
+
+    // data-i18n-title elements
+    document.querySelectorAll("[data-i18n-title]").forEach(el => {
+        const key = el.getAttribute("data-i18n-title");
+        el.title = t(key);
+    });
+
+    // PIN screen hint
+    const pinHint = document.getElementById("pin-default-hint");
+    if (pinHint) pinHint.textContent = t("pin_default");
+
+    // PIN screen message (if not an error)
+    const pinMsg = document.getElementById("pin-msg");
+    if (pinMsg && !pinMsg.classList.contains("error")) {
+        pinMsg.textContent = t("pin_enter");
+    }
+}
+
+/* ══════════════════════════════════════════════
+   THEME SYSTEM
+══════════════════════════════════════════════ */
+const THEME_KEY = "app_theme";
+
+const THEMES = [
+    {
+        id: "default",
+        name: "Classic",
+        emoji: "🌐",
+        swatchColors: ["#2c3e50", "#3498db", "#f4f7f6"],
+        cardBg: "#2c3e50",
+        cardText: "#ffffff"
+    },
+    {
+        id: "ocean",
+        name: "Ocean",
+        emoji: "🌊",
+        swatchColors: ["#0a2540", "#00c2ff", "#0d1b2a"],
+        cardBg: "#0a2540",
+        cardText: "#d0e8ff"
+    },
+    {
+        id: "forest",
+        name: "Forest",
+        emoji: "🌿",
+        swatchColors: ["#1b4332", "#40916c", "#f0f4f1"],
+        cardBg: "#1b4332",
+        cardText: "#ffffff"
+    },
+    {
+        id: "sunset",
+        name: "Sunset",
+        emoji: "🌅",
+        swatchColors: ["#7b2d8b", "#f7971e", "#1a0a2e"],
+        cardBg: "#7b2d8b",
+        cardText: "#f0e6ff"
+    },
+    {
+        id: "rosegold",
+        name: "Rose Gold",
+        emoji: "🌸",
+        swatchColors: ["#6b3040", "#c9776a", "#fdf6f0"],
+        cardBg: "#6b3040",
+        cardText: "#ffffff"
+    },
+    {
+        id: "slate",
+        name: "Slate Night",
+        emoji: "🌙",
+        swatchColors: ["#1e1e2e", "#cba6f7", "#181825"],
+        cardBg: "#1e1e2e",
+        cardText: "#cdd6f4"
+    }
+];
+
+function getTheme() { return localStorage.getItem(THEME_KEY) || "default"; }
+
+function applyTheme(id) {
+    THEMES.forEach(t => document.body.classList.remove("theme-" + t.id));
+    if (id !== "default") document.body.classList.add("theme-" + id);
+    localStorage.setItem(THEME_KEY, id);
+    document.querySelectorAll(".theme-card").forEach(c => {
+        c.classList.toggle("selected", c.dataset.theme === id);
+    });
+}
+
+function buildThemePicker() {
+    const grid = document.getElementById("theme-grid");
+    const current = getTheme();
+    grid.innerHTML = "";
+    THEMES.forEach(th => {
+        const card = document.createElement("div");
+        card.className = "theme-card" + (th.id === current ? " selected" : "");
+        card.dataset.theme = th.id;
+        card.style.background = th.cardBg;
+        card.style.color = th.cardText;
+        card.innerHTML = `
+            <div class="theme-swatch">
+                <span style="background:${th.swatchColors[0]}"></span>
+                <span style="background:${th.swatchColors[1]}"></span>
+                <span style="background:${th.swatchColors[2]}"></span>
+            </div>
+            <span class="theme-emoji">${th.emoji}</span>
+            <span class="theme-name">${th.name}</span>
+        `;
+        card.onclick = () => applyTheme(th.id);
+        grid.appendChild(card);
+    });
+}
+
+/* ══════════════════════════════════════════════
+   PIN LOGIC
+══════════════════════════════════════════════ */
+const PIN_KEY         = "app_pin";
+const PIN_ENABLED_KEY = "app_pin_enabled";
+
+let pinBuffer = "";
+let pinMode = "login";
+
+function getPIN()        { return localStorage.getItem(PIN_KEY) || null; }
+function isPINEnabled()  { return localStorage.getItem(PIN_ENABLED_KEY) === "1"; }
+function setPINEnabled(v){ localStorage.setItem(PIN_ENABLED_KEY, v ? "1" : "0"); }
+function savePIN(pin)    { localStorage.setItem(PIN_KEY, pin); }
+
+function showPinScreen(mode) {
+    pinMode = mode;
+    pinBuffer = "";
+    updatePinDots();
+    const msg = document.getElementById("pin-msg");
+    msg.className = "";
+    msg.textContent = mode === "login" ? t("pin_enter") : t("pin_set_new");
+    document.getElementById("pin-screen").classList.add("active");
+}
+
+function hidePinScreen() {
+    document.getElementById("pin-screen").classList.remove("active");
+}
+
+function pinKey(digit) {
+    if (pinBuffer.length >= 4) return;
+    pinBuffer += digit;
+    updatePinDots();
+    if (pinBuffer.length === 4) setTimeout(handlePinComplete, 120);
+}
+
+function pinDel() {
+    pinBuffer = pinBuffer.slice(0, -1);
+    updatePinDots();
+}
+
+function updatePinDots() {
+    for (let i = 0; i < 4; i++) {
+        document.getElementById("dot-" + i).classList.toggle("filled", i < pinBuffer.length);
+    }
+}
+
+function handlePinComplete() {
+    if (pinMode === "login") {
+        if (pinBuffer === getPIN()) {
+            hidePinScreen();
+        } else {
+            pinBuffer = "";
+            updatePinDots();
+            const msg = document.getElementById("pin-msg");
+            msg.textContent = t("pin_wrong");
+            msg.className = "error";
+            setTimeout(() => { msg.className = ""; msg.textContent = t("pin_enter"); }, 1500);
+        }
+    }
+}
+
+/* Boot: set default PIN 1234 if no PIN exists yet, then check */
+function bootPinCheck() {
+    if (!getPIN()) {
+        savePIN("1234");
+        setPINEnabled(true);
+    }
+    if (isPINEnabled() && getPIN()) {
+        showPinScreen("login");
+    }
+}
+
+/* ══════════════════════════════════════════════
+   PRIVACY POLICY MODAL
+══════════════════════════════════════════════ */
+function openPrivacy() {
+    document.getElementById("privacy-content").innerHTML = t("privacy_html");
+    document.getElementById("privacy-modal").classList.add("active");
+}
+
+function closePrivacy() {
+    document.getElementById("privacy-modal").classList.remove("active");
+}
+
+document.getElementById("privacy-modal").addEventListener("click", function(e) {
+    if (e.target === this) closePrivacy();
+});
+
+/* ══════════════════════════════════════════════
+   BACKUP EXPORT / IMPORT
+══════════════════════════════════════════════ */
+function exportBackup() {
+    const backupData = {
+        _version: 1,
+        _exported: new Date().toISOString(),
+        finanse: window.data
+    };
+    const json = JSON.stringify(backupData, null, 2);
+    const blob = new Blob([json], { type: "application/json;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const now = new Date();
+    const stamp = now.getFullYear() + "-" + String(now.getMonth()+1).padStart(2,"0") + "-" + String(now.getDate()).padStart(2,"0");
+    a.href = url;
+    a.download = "finanse_pro_backup_" + stamp + ".json";
+    a.click();
+    URL.revokeObjectURL(url);
+    showBackupMsg(t("backup_export_ok"), "ok");
+}
+
+function importBackup(input) {
+    const file = input.files[0];
+    if (!file) return;
+    if (!confirm(t("backup_import_confirm"))) { input.value = ""; return; }
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const parsed = JSON.parse(e.target.result);
+            let restored;
+            if (parsed._version && parsed.finanse) {
+                restored = parsed.finanse;
+            } else if (parsed.global !== undefined) {
+                // direct data object (legacy)
+                restored = parsed;
+            } else {
+                throw new Error("invalid");
+            }
+            window.data = restored;
+            localStorage.setItem("finanse", JSON.stringify(window.data));
+            if (typeof saveToCloud === "function") saveToCloud(window.data);
+            if (typeof load === "function") load();
+            showBackupMsg(t("backup_import_ok"), "ok");
+        } catch(err) {
+            showBackupMsg(t("backup_import_err"), "err");
+        }
+        input.value = "";
+    };
+    reader.readAsText(file);
+}
+
+function showBackupMsg(text, type) {
+    const msg = document.getElementById("backup-msg");
+    if (!msg) return;
+    msg.textContent = text;
+    msg.className = "settings-msg " + type;
+    setTimeout(() => { msg.textContent = ""; msg.className = "settings-msg"; }, 4000);
+}
+
+/* ══════════════════════════════════════════════
+   SETTINGS MODAL
+══════════════════════════════════════════════ */
+function openSettings() {
+    buildThemePicker();
+    applyTranslations();
+    const enabled = isPINEnabled() && getPIN();
+    document.getElementById("pin-enabled-toggle").checked = !!enabled;
+    document.getElementById("pin-change-section").style.display = enabled ? "block" : "none";
+    document.getElementById("pin-current").value = "";
+    document.getElementById("pin-new").value = "";
+    document.getElementById("pin-repeat").value = "";
+    const msg = document.getElementById("pin-settings-msg");
+    msg.textContent = "";
+    msg.className = "settings-msg";
+    if (!getPIN()) {
+        document.getElementById("pin-current").placeholder = "—";
+        document.getElementById("pin-current").disabled = true;
+    } else {
+        document.getElementById("pin-current").placeholder = t("pin_current");
+        document.getElementById("pin-current").disabled = false;
+    }
+    document.getElementById("settings-modal").classList.add("active");
+}
+
+function closeSettings() {
+    document.getElementById("settings-modal").classList.remove("active");
+}
+
+function togglePinEnabled() {
+    const enabled = document.getElementById("pin-enabled-toggle").checked;
+    const section = document.getElementById("pin-change-section");
+    if (enabled) {
+        if (!getPIN()) {
+            section.style.display = "block";
+            document.getElementById("pin-current").disabled = true;
+            document.getElementById("pin-current").placeholder = "—";
+            showSettingsMsg(t("pin_set_below"), "ok");
+        } else {
+            section.style.display = "block";
+            setPINEnabled(true);
+            showSettingsMsg(t("pin_enabled"), "ok");
+        }
+    } else {
+        setPINEnabled(false);
+        section.style.display = "none";
+        showSettingsMsg(t("pin_disabled"), "ok");
+    }
+}
+
+function changePIN() {
+    const currentInput = document.getElementById("pin-current").value.trim();
+    const newPin       = document.getElementById("pin-new").value.trim();
+    const repeatPin    = document.getElementById("pin-repeat").value.trim();
+
+    if (!/^\d{4}$/.test(newPin)) return showSettingsMsg(t("pin_4digits"), "err");
+    if (newPin !== repeatPin)    return showSettingsMsg(t("pin_no_match"), "err");
+
+    const existingPin = getPIN();
+    if (existingPin && currentInput !== existingPin) return showSettingsMsg(t("pin_wrong_current"), "err");
+
+    savePIN(newPin);
+    setPINEnabled(true);
+    document.getElementById("pin-enabled-toggle").checked = true;
+    document.getElementById("pin-change-section").style.display = "block";
+    document.getElementById("pin-current").disabled = false;
+    document.getElementById("pin-current").placeholder = t("pin_current");
+    document.getElementById("pin-current").value = "";
+    document.getElementById("pin-new").value = "";
+    document.getElementById("pin-repeat").value = "";
+    showSettingsMsg(t("pin_saved"), "ok");
+}
+
+function showSettingsMsg(text, type) {
+    const msg = document.getElementById("pin-settings-msg");
+    msg.textContent = text;
+    msg.className = "settings-msg " + type;
+}
+
+document.getElementById("settings-modal").addEventListener("click", function(e) {
+    if (e.target === this) closeSettings();
+});
+
+/* ══════════════════════════════════════════════
+   APP LOGIC (unchanged)
+══════════════════════════════════════════════ */
 let now = new Date();
 let currentMonth = now.getMonth();
 let currentYear = now.getFullYear();
@@ -221,7 +1589,7 @@ let calYear = currentYear;
 window.data = JSON.parse(localStorage.getItem("finanse")) || { global: { longTerm: [] } };
 if(!window.data.global) window.data.global = { longTerm: [] };
 
-const months = ["Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień"];
+function getMonths() { return t("months"); }
 
 function init() { renderMonths(); updateYear(); load(); renderCalendar(); }
 function updateYear() { document.getElementById("year").innerText = currentYear; }
@@ -232,7 +1600,7 @@ function goToToday() { currentMonth = now.getMonth(); currentYear = now.getFullY
 function renderMonths() {
     const div = document.getElementById("months");
     div.innerHTML = "";
-    months.forEach((m, i) => {
+    getMonths().forEach((m, i) => {
         let d = document.createElement("div");
         d.innerText = m.substring(0,3);
         d.className = "month" + (i === currentMonth ? " active" : "");
@@ -243,11 +1611,9 @@ function renderMonths() {
 
 function key() { return currentYear + "-" + currentMonth; }
 
-function save() { 
-    localStorage.setItem("finanse", JSON.stringify(window.data)); 
-    if (typeof saveToCloud === "function") {
-        saveToCloud(window.data);
-    }
+function save() {
+    localStorage.setItem("finanse", JSON.stringify(window.data));
+    if (typeof saveToCloud === "function") saveToCloud(window.data);
 }
 
 function load() {
@@ -268,7 +1634,7 @@ function load() {
 
 function addIncome(d = {}) {
     let r = document.getElementById("incomeBody").insertRow();
-    r.innerHTML = `<td></td><td><input class="inc-name" placeholder="Nazwa" value="${d.name||''}" oninput="update()"><div class="kwota-wrap"><input type="number" class="inc-amount" placeholder="Kwota" value="${d.amount||''}" oninput="update()" style="margin-top:5px"></div></td><td><button class="btn-action" onclick="removeRow(this)">🗑️</button></td>`;
+    r.innerHTML = `<td></td><td><input class="inc-name" placeholder="${t('placeholder_name')}" value="${d.name||''}" oninput="update()"><div class="kwota-wrap"><input type="number" class="inc-amount" placeholder="${t('amount')}" value="${d.amount||''}" oninput="update()" style="margin-top:5px"></div></td><td><button class="btn-action" onclick="confirmRemove(this)">&#128465;</button></td>`;
 }
 
 function addExpense(d = {}) {
@@ -277,35 +1643,57 @@ function addExpense(d = {}) {
     r.innerHTML = `
         <td></td>
         <td class="name-cell">
-            <input class="exp-name" placeholder="Co?" value="${d.name||''}" oninput="update()" style="font-weight:bold; border:none; background:transparent; padding:2px;">
-            <input class="exp-bank sub-input" placeholder="Źródło spłaty" value="${d.bank||''}" oninput="update()">
+            <input class="exp-name" placeholder="${t('placeholder_what')}" value="${d.name||''}" oninput="update()" style="font-weight:bold; border:none; background:transparent; padding:2px; color:var(--text);">
+            <input class="exp-bank sub-input" placeholder="${t('placeholder_payment_source')}" value="${d.bank||''}" oninput="update()">
             <input type="date" class="exp-date sub-input" value="${d.date||''}" onchange="update()">
         </td>
         <td>
             <div class="kwota-wrap"><input type="number" class="exp-amount" placeholder="0" value="${d.amount||''}" oninput="update()"></div>
-            <input type="number" class="exp-pamount sub-input" placeholder="Wpłacono" value="${d.partialAmount||''}" oninput="update()" style="display:${d.partial?'block':'none'}">
-            <span class="remaining-tag" style="display:${d.partial?'block':'none'}">Reszta: 0</span>
+            <input type="number" class="exp-pamount sub-input" placeholder="${t('placeholder_paid')}" value="${d.partialAmount||''}" oninput="update()" style="display:${d.partial?'block':'none'}">
+            <span class="remaining-tag" style="display:${d.partial?'block':'none'}">${t('remaining_label')}: 0</span>
         </td>
         <td><input type="checkbox" class="exp-paid" ${d.paid?'checked':''} onchange="update()"></td>
         <td><input type="checkbox" class="exp-partial" ${d.partial?'checked':''} onchange="togglePartial(this)"></td>
         <td>
             <div class="action-group">
-                <button class="btn-action" onclick="moveRow(this, -1)">▲</button>
-                <button class="btn-action" onclick="moveRow(this, 1)">▼</button>
-                <button class="btn-action" onclick="removeRow(this)">🗑️</button>
+                <button class="btn-action" onclick="moveRow(this, -1)">&#9650;</button>
+                <button class="btn-action" onclick="moveRow(this, 1)">&#9660;</button>
+                <button class="btn-action" onclick="confirmRemove(this)">&#128465;</button>
             </div>
         </td>`;
 }
 
 function addReminder(d = {}) {
     let r = document.getElementById("reminderBody").insertRow();
-    r.innerHTML = `<td></td><td><input class="rem-name" placeholder="Zadanie" value="${d.name||''}" oninput="update()"><input type="date" class="rem-date sub-input" value="${d.date||''}" onchange="update()"></td><td><button class="btn-action" onclick="removeRow(this)">🗑️</button></td>`;
+    r.innerHTML = `<td></td><td><input class="rem-name" placeholder="${t('placeholder_task')}" value="${d.name||''}" oninput="update()"><input type="date" class="rem-date sub-input" value="${d.date||''}" onchange="update()"></td><td><button class="btn-action" onclick="confirmRemove(this)">&#128465;</button></td>`;
 }
 
 function addLongTerm(d = {}) {
     let r = document.getElementById("longTermBody").insertRow();
-    r.innerHTML = `<td></td><td><input class="lt-name" placeholder="Zobowiązanie" value="${d.name||''}" oninput="update()"><input type="date" class="lt-date sub-input" value="${d.date||''}" onchange="update()"></td><td><div class="kwota-wrap"><input type="number" class="lt-amount" placeholder="Kwota" value="${d.amount||''}" oninput="update()"></div></td><td><button class="btn-action" onclick="removeRow(this, true)">🗑️</button></td>`;
+    r.innerHTML = `<td></td><td><input class="lt-name" placeholder="${t('placeholder_obligation')}" value="${d.name||''}" oninput="update()"><input type="date" class="lt-date sub-input" value="${d.date||''}" onchange="update()"></td><td><div class="kwota-wrap"><input type="number" class="lt-amount" placeholder="${t('amount')}" value="${d.amount||''}" oninput="update()"></div></td><td><button class="btn-action" onclick="confirmRemove(this, true)">&#128465;</button></td>`;
 }
+
+/* ── Delete confirmation modal ── */
+let _pendingRemoveBtn = null;
+
+function confirmRemove(btn) {
+    _pendingRemoveBtn = btn;
+    document.getElementById("confirm-modal").classList.add("active");
+}
+
+document.getElementById("confirm-yes").onclick = function() {
+    document.getElementById("confirm-modal").classList.remove("active");
+    if (_pendingRemoveBtn) { _pendingRemoveBtn.closest("tr").remove(); update(); _pendingRemoveBtn = null; }
+};
+
+document.getElementById("confirm-no").onclick = function() {
+    document.getElementById("confirm-modal").classList.remove("active");
+    _pendingRemoveBtn = null;
+};
+
+document.getElementById("confirm-modal").addEventListener("click", function(e) {
+    if (e.target === this) { this.classList.remove("active"); _pendingRemoveBtn = null; }
+});
 
 function togglePartial(cb) {
     let row = cb.closest("tr");
@@ -317,13 +1705,8 @@ function togglePartial(cb) {
 function moveRow(btn, dir) {
     const row = btn.closest("tr");
     const sibling = dir === -1 ? row.previousElementSibling : row.nextElementSibling;
-    if (sibling) {
-        row.parentNode.insertBefore(dir === -1 ? row : sibling, dir === -1 ? sibling : row);
-        update();
-    }
+    if (sibling) { row.parentNode.insertBefore(dir === -1 ? row : sibling, dir === -1 ? sibling : row); update(); }
 }
-
-function removeRow(btn, isGlobal = false) { btn.closest("tr").remove(); update(); }
 
 function update() {
     let k = key();
@@ -333,7 +1716,7 @@ function update() {
     window.data[k].vacation = document.getElementById("vacation").value;
     if(!window.data.global) window.data.global = { longTerm: [] };
     window.data.global.longTerm = [];
-    
+
     let inc = 0, exp = 0, bankMap = {}, todayStr = new Date().toISOString().split('T')[0];
 
     document.querySelectorAll("#incomeBody tr").forEach(r => {
@@ -342,12 +1725,11 @@ function update() {
     });
 
     document.querySelectorAll("#expenseBody tr").forEach(r => {
-        let name = r.querySelector(".exp-name").value, bank = r.querySelector(".exp-bank").value || "Nieokreślone", date = r.querySelector(".exp-date").value, amount = Number(r.querySelector(".exp-amount").value) || 0, paid = r.querySelector(".exp-paid").checked, partial = r.querySelector(".exp-partial").checked, pAmount = Number(r.querySelector(".exp-pamount").value) || 0;
+        let name = r.querySelector(".exp-name").value, bank = r.querySelector(".exp-bank").value || t("unspecified"), date = r.querySelector(".exp-date").value, amount = Number(r.querySelector(".exp-amount").value) || 0, paid = r.querySelector(".exp-paid").checked, partial = r.querySelector(".exp-partial").checked, pAmount = Number(r.querySelector(".exp-pamount").value) || 0;
         let remaining = amount - pAmount;
-        r.querySelector(".remaining-tag").innerText = "Reszta: " + (remaining > 0 ? remaining : 0);
-        let costToSum = partial ? pAmount : amount;
-        exp += costToSum;
-        if(!bankMap[bank]) bankMap[bank] = 0; bankMap[bank] += costToSum;
+        r.querySelector(".remaining-tag").innerText = t("remaining_label") + ": " + (remaining > 0 ? remaining : 0);
+        exp += amount;
+        if(!bankMap[bank]) bankMap[bank] = 0; bankMap[bank] += amount;
         window.data[k].expense.push({ name, bank, date, amount, paid, partial, partialAmount: pAmount });
         r.classList.remove("paid", "partial", "overdue");
         if (paid) r.classList.add("paid"); else if (partial) r.classList.add("partial"); else if (date && date < todayStr) r.classList.add("overdue");
@@ -376,7 +1758,7 @@ function renumber() {
 function renderBanks(map) {
     let bDiv = document.getElementById("banks"); bDiv.innerHTML = "";
     for (let b in map) {
-        if(b !== "") bDiv.innerHTML += `<div style="background:white; padding:10px; margin-bottom:5px; border-radius:8px; border-left:4px solid var(--accent); display:flex; justify-content:space-between"><span>${b}</span><span>${map[b].toLocaleString()} zł</span></div>`;
+        if(b !== "") bDiv.innerHTML += `<div style="background:var(--white); color:var(--text); padding:10px; margin-bottom:5px; border-radius:8px; border-left:4px solid var(--accent); display:flex; justify-content:space-between"><span>${b}</span><span>${map[b].toLocaleString()} zł</span></div>`;
     }
 }
 
@@ -387,8 +1769,9 @@ function renderCalendar() {
     const d = new Date(calYear, calMonth, 1);
     const lastDay = new Date(calYear, calMonth + 1, 0).getDate();
     let startDay = d.getDay() === 0 ? 6 : d.getDay() - 1;
-    let html = `<div style="display:flex; justify-content:space-between; margin-bottom:10px"><button class="btn-action" onclick="changeCalMonth(-1)">◀</button><b>${months[calMonth]} ${calYear}</b><button class="btn-action" onclick="changeCalMonth(1)">▶</button></div><div class="cal-grid">`;
-    ["Pn","Wt","Śr","Cz","Pt","So","Nd"].forEach(day => html += `<div style="font-weight:bold; color:#999">${day}</div>`);
+    const monthName = getMonths()[calMonth];
+    let html = `<div style="display:flex; justify-content:space-between; margin-bottom:10px"><button class="btn-action" onclick="changeCalMonth(-1)">&#9664;</button><b style="color:var(--text)">${monthName} ${calYear}</b><button class="btn-action" onclick="changeCalMonth(1)">&#9654;</button></div><div class="cal-grid">`;
+    t("cal_days").forEach(day => html += `<div style="font-weight:bold; color:var(--text-muted)">${day}</div>`);
     for(let i=0; i<startDay; i++) html += `<div></div>`;
     for(let day=1; day<=lastDay; day++) {
         let isToday = (day === now.getDate() && calMonth === now.getMonth() && calYear === now.getFullYear()) ? "today" : "";
@@ -397,11 +1780,94 @@ function renderCalendar() {
     cal.innerHTML = html + "</div>";
 }
 
+/* ── Export PDF ── */
+function exportPDF() {
+    const k = key();
+    const d = window.data[k] || { income: [], expense: [], reminders: [], notes: "", vacation: "" };
+    const monthName = getMonths()[currentMonth] + " " + currentYear;
+    const inc = d.income.reduce((s, i) => s + (i.amount || 0), 0);
+    const exp = d.expense.reduce((s, e) => s + (e.amount || 0), 0);
+    const bal = inc - exp;
+
+    let incRows = d.income.map((i, idx) =>
+        `<tr><td>${idx+1}</td><td>${i.name || ""}</td><td style="text-align:right">${(i.amount||0).toLocaleString()} zł</td></tr>`
+    ).join("") || `<tr><td colspan="3" style="color:#aaa">${t('pdf_no_data')}</td></tr>`;
+
+    let expRows = d.expense.map((e, idx) => {
+        let status = e.paid ? t('pdf_paid') : e.partial ? t('pdf_partial') : t('pdf_unpaid');
+        let remaining = e.partial ? ` (${t('pdf_rest')}: ${Math.max(0, (e.amount||0) - (e.partialAmount||0)).toLocaleString()} zł)` : "";
+        return `<tr><td>${idx+1}</td><td>${e.name||""}<br><small style="color:#999">${e.bank||""} ${e.date ? "· "+e.date : ""}</small></td><td style="text-align:right">${(e.amount||0).toLocaleString()} zł</td><td>${status}${remaining}</td></tr>`;
+    }).join("") || `<tr><td colspan="4" style="color:#aaa">${t('pdf_no_data')}</td></tr>`;
+
+    const notesHtml = d.notes ? `<h3>${t('pdf_notes_section')}</h3><p style="white-space:pre-wrap">${d.notes}</p>` : "";
+    const vacHtml = d.vacation ? `<h3>${t('pdf_vacation_section')}</h3><p style="white-space:pre-wrap">${d.vacation}</p>` : "";
+
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>Finanse PRO - ${monthName}</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; color: #333; padding: 30px; max-width: 800px; margin: auto; }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h3 { color: #2c3e50; margin-top: 28px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+        th { background: #2c3e50; color: white; padding: 8px; text-align: left; font-size: 12px; }
+        td { padding: 8px; border-bottom: 1px solid #eee; font-size: 13px; vertical-align: top; }
+        .summary { background: #2c3e50; color: white; padding: 20px; border-radius: 10px; display: flex; gap: 30px; margin-top: 20px; flex-wrap: wrap; }
+        .summary div { flex: 1; }
+        .summary .val { font-size: 1.4em; font-weight: bold; }
+        .balance-val { font-size: 1.8em !important; color: #5dade2 !important; }
+        @media print { body { padding: 0; } }
+    </style></head><body>
+    <h1>Finanse PRO &nbsp;&middot;&nbsp; ${monthName}</h1>
+    <div class="summary">
+        <div>${t('pdf_income_total')}<br><span class="val">${inc.toLocaleString()} zł</span></div>
+        <div>${t('pdf_expense_total')}<br><span class="val">${exp.toLocaleString()} zł</span></div>
+        <div>${t('pdf_balance')}<br><span class="val balance-val">${bal.toLocaleString()} zł</span></div>
+    </div>
+    <h3>${t('pdf_income_section')}</h3>
+    <table><thead><tr><th>#</th><th>${t('pdf_col_name')}</th><th>${t('pdf_col_amount')}</th></tr></thead><tbody>${incRows}</tbody></table>
+    <h3>${t('pdf_expense_section')}</h3>
+    <table><thead><tr><th>#</th><th>${t('pdf_col_desc')}</th><th>${t('pdf_col_amount')}</th><th>${t('pdf_col_status')}</th></tr></thead><tbody>${expRows}</tbody></table>
+    ${notesHtml}${vacHtml}
+    <p style="margin-top:40px; color:#aaa; font-size:11px">${t('pdf_generated')}: ${new Date().toLocaleString(currentLang === 'pl' ? 'pl-PL' : 'en-GB')}</p>
+    <script>window.onload = () => window.print();<\/script>
+    </body></html>`;
+
+    const win = window.open("", "_blank");
+    win.document.write(html);
+    win.document.close();
+}
+
+/* ── Export CSV ── */
+function exportCSV() {
+    const k = key();
+    const d = window.data[k] || { income: [], expense: [] };
+    const monthName = getMonths()[currentMonth] + " " + currentYear;
+
+    const escape = v => `"${String(v||"").replace(/"/g,'""')}"`;
+    let rows = [[t('csv_month'), t('csv_type'), t('csv_name'), t('csv_source'), t('csv_date'), t('csv_amount'), t('csv_status'), t('csv_paid_amount'), t('csv_remaining')]];
+
+    d.income.forEach(i => { rows.push([monthName, t('csv_income'), i.name||"", "", "", i.amount||0, "", "", ""]); });
+    d.expense.forEach(e => {
+        let status = e.paid ? t('pdf_paid') : e.partial ? t('pdf_partial') : t('pdf_unpaid');
+        let remaining = e.partial ? Math.max(0, (e.amount||0) - (e.partialAmount||0)) : "";
+        rows.push([monthName, t('csv_expense'), e.name||"", e.bank||"", e.date||"", e.amount||0, status, e.partial ? (e.partialAmount||0) : "", remaining]);
+    });
+
+    const csv = "\uFEFF" + rows.map(r => r.map(escape).join(";")).join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `finanse_${currentYear}_${String(currentMonth+1).padStart(2,"0")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
 function cloneIncome() {
     let nm = currentMonth + 1, ny = currentYear; if (nm > 11) { nm = 0; ny++; }
     if (!window.data[ny + "-" + nm]) window.data[ny + "-" + nm] = { income: [], expense: [], reminders: [], notes: "", vacation: "" };
     window.data[ny + "-" + nm].income = JSON.parse(JSON.stringify(window.data[key()].income));
-    save(); alert("Skopiowano dochody!");
+    save(); alert(t("alert_income_copied"));
 }
 
 function cloneExpenses() {
@@ -409,35 +1875,102 @@ function cloneExpenses() {
     if (!window.data[ny + "-" + nm]) window.data[ny + "-" + nm] = { income: [], expense: [], reminders: [], notes: "", vacation: "" };
     window.data[ny + "-" + nm].expense = JSON.parse(JSON.stringify(window.data[key()].expense)).map(e => {
         e.paid = false; e.partial = false;
-        if (e.date) {
-            let d = new Date(e.date); d.setMonth(d.getMonth() + 1); e.date = d.toISOString().split('T')[0];
-        }
+        if (e.date) { let d = new Date(e.date); d.setMonth(d.getMonth() + 1); e.date = d.toISOString().split('T')[0]; }
         return e;
     });
-    save(); alert("Skopiowano wydatki!");
+    save(); alert(t("alert_expenses_copied"));
 }
 
 function cloneReminders() {
     let nm = currentMonth + 1, ny = currentYear; if (nm > 11) { nm = 0; ny++; }
     if (!window.data[ny + "-" + nm]) window.data[ny + "-" + nm] = { income: [], expense: [], reminders: [], notes: "", vacation: "" };
     window.data[ny + "-" + nm].reminders = JSON.parse(JSON.stringify(window.data[key()].reminders)).map(r => {
-        if (r.date) {
-            let d = new Date(r.date); d.setMonth(d.getMonth() + 1); r.date = d.toISOString().split('T')[0];
-        }
+        if (r.date) { let d = new Date(r.date); d.setMonth(d.getMonth() + 1); r.date = d.toISOString().split('T')[0]; }
         return r;
     });
-    save(); alert("Skopiowano przypomnienia!");
+    save(); alert(t("alert_reminders_copied"));
 }
 
 function cloneVacation() {
     let nm = currentMonth + 1, ny = currentYear; if (nm > 11) { nm = 0; ny++; }
     if (!window.data[ny + "-" + nm]) window.data[ny + "-" + nm] = { income: [], expense: [], reminders: [], notes: "", vacation: "" };
     window.data[ny + "-" + nm].vacation = document.getElementById("vacation").value;
-    save(); alert("Skopiowano plany!");
+    save(); alert(t("alert_vacation_copied"));
 }
 
+/* ══════════════════════════════════════════════
+   TUTORIAL
+══════════════════════════════════════════════ */
+const TUT_KEY = "tut_done_v1";
+let tutStep = 0;
+
+function tutorialStart() {
+    tutStep = 0;
+    tutorialRender();
+    document.getElementById("tutorial-overlay").classList.add("active");
+}
+
+function tutorialClose() {
+    document.getElementById("tutorial-overlay").classList.remove("active");
+    localStorage.setItem(TUT_KEY, "1");
+}
+
+function tutorialNext() {
+    const steps = t("tut_steps");
+    if (tutStep < steps.length - 1) {
+        tutStep++;
+        tutorialRender();
+    } else {
+        tutorialClose();
+    }
+}
+
+function tutorialPrev() {
+    if (tutStep > 0) {
+        tutStep--;
+        tutorialRender();
+    }
+}
+
+function tutorialRender() {
+    const steps = t("tut_steps");
+    const step = steps[tutStep];
+    const isLast = tutStep === steps.length - 1;
+
+    document.getElementById("tut-icon").textContent = step.icon;
+    document.getElementById("tut-title").textContent = step.title;
+    document.getElementById("tut-body").innerHTML = step.body;
+    document.getElementById("tut-skip").textContent = t("tut_skip");
+    document.getElementById("tut-next").textContent = isLast ? t("tut_finish") : t("tut_next");
+    document.getElementById("tut-back").textContent = t("tut_back");
+    document.getElementById("tut-back").style.display = tutStep === 0 ? "none" : "block";
+
+    // Dots
+    const dotsEl = document.getElementById("tut-dots");
+    dotsEl.innerHTML = "";
+    steps.forEach((_, i) => {
+        const dot = document.createElement("div");
+        dot.className = "tut-step-dot" + (i === tutStep ? " active" : i < tutStep ? " done" : "");
+        dotsEl.appendChild(dot);
+    });
+}
+
+function tutorialBootCheck() {
+    if (!localStorage.getItem(TUT_KEY)) {
+        // Delay slightly so PIN screen renders first (if enabled)
+        setTimeout(tutorialStart, 800);
+    }
+}
+
+/* Apply saved theme and language before first paint, then boot */
+applyTheme(getTheme());
+applyTranslations();
 init();
+bootPinCheck();
+tutorialBootCheck();
 
 </script>
+</div><!-- /#app-content -->
+
 </body>
 </html>
