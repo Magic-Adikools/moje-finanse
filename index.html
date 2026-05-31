@@ -1215,7 +1215,7 @@ function t(key) {
 
 function setLanguage(lang) {
     currentLang = lang;
-    localStorage.setItem(finanse_LANG_KEY, lang);
+    localStorage.setItem(LANG_KEY, lang);
     applyTranslations();
     // Re-render dynamic parts
     renderMonths();
@@ -1319,7 +1319,7 @@ function getTheme() { return localStorage.getItem(THEME_KEY) || "default"; }
 function applyTheme(id) {
     THEMES.forEach(t => document.body.classList.remove("theme-" + t.id));
     if (id !== "default") document.body.classList.add("theme-" + id);
-    localStorage.setItem(finanse_THEME_KEY, id);
+    localStorage.setItem(THEME_KEY, id);
     document.querySelectorAll(".theme-card").forEach(c => {
         c.classList.toggle("selected", c.dataset.theme === id);
     });
@@ -1360,8 +1360,8 @@ let pinMode = "login";
 
 function getPIN()        { return localStorage.getItem(PIN_KEY) || null; }
 function isPINEnabled()  { return localStorage.getItem(PIN_ENABLED_KEY) === "1"; }
-function setPINEnabled(v){ localStorage.setItem(finanse_PIN_ENABLED_KEY, v ? "1" : "0"); }
-function savePIN(pin)    { localStorage.setItem(finanse_PIN_KEY, pin); }
+function setPINEnabled(v){ localStorage.setItem(PIN_ENABLED_KEY, v ? "1" : "0"); }
+function savePIN(pin)    { localStorage.setItem(PIN_KEY, pin); }
 
 function showPinScreen(mode) {
     pinMode = mode;
@@ -1915,7 +1915,7 @@ function tutorialStart() {
 
 function tutorialClose() {
     document.getElementById("tutorial-overlay").classList.remove("active");
-    localStorage.setItem(finanse_TUT_KEY, "1");
+    localStorage.setItem(TUT_KEY, "1");
 }
 
 function tutorialNext() {
@@ -2080,7 +2080,7 @@ async function notificationsBootCheck() {
     if (Notification.permission === "default" && !localStorage.getItem(NOTIF_KEY)) {
         setTimeout(async () => {
             const granted = await requestNotificationPermission();
-            localStorage.setItem(finanse_NOTIF_KEY, granted ? "granted" : "denied");
+            localStorage.setItem(NOTIF_KEY, granted ? "granted" : "denied");
             if (granted) checkNotifications();
         }, 3000);
     }
