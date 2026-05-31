@@ -27,6 +27,13 @@
     const auth = getAuth(app);
     const provider = new GoogleAuthProvider();
 
+    // === TUTAJ WKLEJAMY BRAKUJĄCĄ FUNKCJĘ ===
+    window.notificationsBootCheck = function() {
+        console.log("Inicjalizacja powiadomień...");
+        // Tutaj znajduje się reszta Twojego kodu powiadomień, jeśli go masz
+    };
+    // =======================================
+
     let lastAction = 0;
     let remoteTimestamp = 0;
     let docRef = null;
