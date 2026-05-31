@@ -8,21 +8,6 @@
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2c3e50">
     <script type="module">
-    // ════════════════════════════════════════════════════════════
-    // SYSTEM BEZPIECZNEGO ROZDZIELANIA DANYCH (ROZWIĄZANIE PROBLEMU)
-    // ════════════════════════════════════════════════════════════
-    const APP_PREFIX = "finanse_pro_";
-
-    Storage.prototype._getItem = Storage.prototype.getItem;
-    Storage.prototype.getItem = function(key) {
-        return this._getItem(APP_PREFIX + key);
-    };
-
-    Storage.prototype._setItem = Storage.prototype.setItem;
-    Storage.prototype.setItem = function(key, value) {
-        this._setItem(APP_PREFIX + key, value);
-    };
-
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getFirestore, doc, setDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
     import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
@@ -41,13 +26,6 @@
     const db = getFirestore(app);
     const auth = getAuth(app);
     const provider = new GoogleAuthProvider();
-
-    // === TUTAJ WKLEJAMY BRAKUJĄCĄ FUNKCJĘ ===
-    window.notificationsBootCheck = function() {
-        console.log("Inicjalizacja powiadomień...");
-        // Tutaj znajduje się reszta Twojego kodu powiadomień, jeśli go masz
-    };
-    // =======================================
 
     let lastAction = 0;
     let remoteTimestamp = 0;
