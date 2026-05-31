@@ -1434,7 +1434,6 @@ function handlePinComplete() {
 
 /* Boot: set default PIN 1234 if no PIN exists yet, then check */
 function bootPinCheck() {
-    return;
     if (!getPIN()) {
         savePIN("1234");
         setPINEnabled(true);
